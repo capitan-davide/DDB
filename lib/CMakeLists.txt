@@ -2,6 +2,7 @@ add_library(LibDDB
   Error.cpp
   Pipe.cpp
   Process.cpp
+  Registers.cpp
 )
 
 add_library(DDB::LibDDB ALIAS LibDDB)
@@ -22,7 +23,7 @@ target_include_directories(
     $<INSTALL_INTERFACE:include>
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
   PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/lib/include
 )
 
 include(GNUInstallDirs)

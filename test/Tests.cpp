@@ -1,5 +1,10 @@
+#include "DDB/Bit.h"
 #include "DDB/Error.h"
+#include "DDB/Pipe.h"
 #include "DDB/Process.h"
+#include "DDB/RegisterInfo.h"
+#include "DDB/Registers.h"
+#include "DDB/Types.h"
 
 #include <cerrno>
 #include <fstream>
@@ -63,9 +68,106 @@ TEST_CASE("Process::resume success", "[Process]") {
   }
 }
 
-TEST_CASE("Process::result already terminated", "[Process]") {
+TEST_CASE("Process::resume not traced", "[Process]") {
+  auto proc = Process::launch("targets/run-endlessly", false);
+  REQUIRE_THROWS_AS(proc->resume(), Error);
+}
+
+TEST_CASE("Process::resume already terminated", "[Process]") {
   auto proc = Process::launch("targets/end-immediately");
   proc->resume();
   proc->waitOnSignal();
   REQUIRE_THROWS_AS(proc->resume(), Error);
+}
+
+TEST_CASE("Process::writeUserArea not traced", "[Process]") {
+  auto proc = Process::launch("targets/run-endlessly", false);
+  REQUIRE_THROWS_AS(proc->writeUserArea(0, 0), Error);
+}
+
+TEST_CASE("Write registers works", "[Register]") {
+  DDB::Pipe pipe(/*closeOnExec=*/false);
+
+  auto proc = Process::launch("targets/reg-write", /*debug=*/true,
+                              /*outFd=*/pipe.getWrite());
+  pipe.closeWrite();
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  Registers &regs = proc->getRegisters();
+  regs.writeById(RegisterId::rsi, 0xcafebabe);
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  auto out = pipe.read();
+  REQUIRE(toStringView(out) == "0xcafebabe");
+
+  regs.writeById(RegisterId::mm0, 0xba5eba11);
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  out = pipe.read();
+  REQUIRE(toStringView(out) == "0xba5eba11");
+
+  regs.writeById(RegisterId::xmm0, 42.24);
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  out = pipe.read();
+  REQUIRE(toStringView(out) == "42.24");
+
+  regs.writeById(RegisterId::st0, 42.24l);
+
+  // The status word tracks the current size of the FPU stack and reports
+  // errors. It's 16 bits wide and bits 11 through 13 track the top of the
+  // stack. Its value starts at index 0 and goes down instead of up, wrapping
+  // around 7. So, to push a value to the stack, we set bits 11 through 13 to
+  // 0b111.
+  regs.writeById(RegisterId::fsw, U16(0b00111000'00000000));
+
+  // The tag register tracks which of the 'st' registers are valid, empty, or
+  // special (i.e., NaNs or infinity). A tag of 0b11 means empty, 0b00 means
+  // valid. We want to set the first tag to 0b00 and the rest to 0b11.
+  regs.writeById(RegisterId::ftw, U16(0b00111111'11111111));
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  out = pipe.read();
+  REQUIRE(toStringView(out) == "42.24");
+}
+
+TEST_CASE("Read register works", "[Register]") {
+  auto proc = Process::launch("targets/reg-read");
+
+  Registers &regs = proc->getRegisters();
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  REQUIRE(regs.readByIdAs<U64>(RegisterId::r13) == 0xcafebabe); // FIXME!!!
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  REQUIRE(regs.readByIdAs<U8>(RegisterId::r13b) == 42);
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  REQUIRE(regs.readByIdAs<Byte64>(RegisterId::mm0) == toByte64(0xba5eba11));
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  REQUIRE(regs.readByIdAs<Byte128>(RegisterId::xmm0) == toByte128(64.125));
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  REQUIRE(regs.readByIdAs<F128>(RegisterId::st0) == 64.125L);
 }
