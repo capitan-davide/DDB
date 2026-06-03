@@ -2,7 +2,7 @@ add_executable(ddb DDB.cpp)
 
 target_link_libraries(
   ddb
-  PRIVATE DDB::LibDDB PkgConfig::libedit
+  PRIVATE DDB::LibDDB PkgConfig::libedit fmt::fmt
 )
 
 include(GNUInstallDirs)

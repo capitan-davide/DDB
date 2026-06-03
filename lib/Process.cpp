@@ -183,6 +183,11 @@ void DDB::Process::readAllRegisters() {
 }
 
 void DDB::Process::writeUserArea(std::size_t offset, U64 data) {
+  // FIXME: When executing 'reg write ah 0x42' ptrace returns EIO error. Still,
+  // the 'ah' portion of 'rax' register seems to be written correctly.
+  // Interestingly, 'reg write al 0x42' does not generate EIO.
+  // The same seems to be happening with all "high" portion of x86_64 registers
+  // (e.g., 'bh, 'ch', etc.).
   if (ptrace(PTRACE_POKEUSER, m_pid, offset, data) == -1) {
     Error::sendErrno("ptrace(PTRACE_POKEUSER)");
   }

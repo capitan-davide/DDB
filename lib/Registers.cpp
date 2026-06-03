@@ -62,7 +62,7 @@ DDB::Registers::Value DDB::Registers::read(const RegisterInfo &info) const {
   }
 }
 
-void DDB::Registers::write(const RegisterInfo &info, Value val) {
+void DDB::Registers::write(const RegisterInfo &info, Value value) {
   std::byte *bytes = asBytes(m_data);
   std::visit(
       [&](auto &v) {
@@ -77,7 +77,7 @@ void DDB::Registers::write(const RegisterInfo &info, Value val) {
           std::terminate();
         }
       },
-      val);
+      value);
 
   // TODO: Write a comment about why it's done like so!
   if (info.type == RegisterType::FPR) {

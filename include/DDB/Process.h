@@ -77,6 +77,9 @@ public:
   ProcessState state() const { return m_state; }
   Registers &getRegisters() { return *m_registers; }
   const Registers &getRegisters() const { return *m_registers; }
+  VirtAddr getPC() const {
+    return VirtAddr(getRegisters().readByIdAs<U64>(RegisterId::rip));
+  }
 
 private:
   Process(pid_t pid, bool termOnEnd, bool isAttached)
