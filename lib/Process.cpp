@@ -29,6 +29,10 @@ namespace {
 } // namespace
 
 DDB::StopReason::StopReason(int waitStatus) {
+  // According to wait(2), a state change is considered to be:
+  //   - the child terminated;
+  //   - the child was stopped by a signal; or
+  //   - the child was resumed by a signal.
   if (WIFEXITED(waitStatus)) {
     state = ProcessState::Exited;
     info = WEXITSTATUS(waitStatus);
@@ -38,8 +42,12 @@ DDB::StopReason::StopReason(int waitStatus) {
   } else if (WIFSTOPPED(waitStatus)) {
     state = ProcessState::Stopped;
     info = WSTOPSIG(waitStatus);
+  } else if (WIFCONTINUED(waitStatus)) {
+    state = ProcessState::Running;
+    info = SIGCONT; // TODO: Verify this
+  } else {
+    // TODO: Handle unreachable
   }
-  // TODO: Explicit WIFCONTINUED?
 }
 
 std::unique_ptr<DDB::Process> DDB::Process::launch(std::filesystem::path path,
@@ -65,21 +73,21 @@ std::unique_ptr<DDB::Process> DDB::Process::launch(std::filesystem::path path,
     }
 
     // PTRACE_TRACEME allows the parent process to trace this child. Also, it
-    // causes the child to stop after calling exec*, giving the parent a chance
-    // to take control before the new program begins execution.
+    // causes the child to stop after calling 'exec*()', giving the parent a
+    // chance to take control before the new program begins execution.
     if (debug && ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) == -1) {
       exitWithPError(pipe, "ptrace(PTRACE_TRACEME)");
     }
 
-    // execlp returns only if there was an error, in which case we write the
+    // 'execlp' returns only if there was an error, in which case we write the
     // error message to the pipe and terminate.
     execlp(path.c_str(), path.c_str(), nullptr);
     exitWithPError(pipe, "execlp");
   }
 
-  // The parent process closes the write end of the pipe and waits for the child
-  // to write to it in case of errors. When the child process closes the write
-  // end (see closeOnExec=true above), the read operation will return.
+  // The parent process closes the write end of the pipe then waits for the
+  // child to write to it in case of errors. When the child process also closes the
+  // write end, the read operation will return (see closeOnExec=true above).
   pipe.closeWrite();
   std::vector<std::byte> data = pipe.read();
   pipe.closeRead();
@@ -93,6 +101,8 @@ std::unique_ptr<DDB::Process> DDB::Process::launch(std::filesystem::path path,
   std::unique_ptr<Process> proc(
       new Process(pid, /*termOnEnd=*/true, /*isAttached=*/debug));
   if (debug) {
+    // In 'debug' mode the child will be traced so we wait for the SIGTRAP to
+    // stop the process.
     proc->waitOnSignal();
   }
 
@@ -104,12 +114,16 @@ std::unique_ptr<DDB::Process> DDB::Process::attach(pid_t pid) {
     Error::send("Invalid PID");
   }
 
+  // PTRACE_ATTACH will make the target process a tracee. The tracee is sent a
+  // SIGSTOP automatically.
   if (ptrace(PTRACE_ATTACH, pid, nullptr, nullptr) == -1) {
     Error::sendErrno("ptrace(PTRACE_ATTACH)");
   }
 
   std::unique_ptr<Process> proc(
       new Process(pid, /*termOnEnd=*/false, /*isAttached=*/true));
+
+  // Here we wait for the SIGSTOP to take effect.
   proc->waitOnSignal();
 
   return proc;
@@ -142,9 +156,9 @@ void DDB::Process::resume() {
 }
 
 DDB::StopReason DDB::Process::waitOnSignal() {
-  // By default, waitpid with options set to 0 waits only for a terminated
-  // child but, when a process is being traced with ptrace, it also returns when
-  // the child has stopped.
+  // By default, waitpid with 'options=0' waits only for child termination but,
+  // when a process is being traced with ptrace, it also returns when the child
+  // has stopped.
   int waitStatus;
   if (waitpid(m_pid, &waitStatus, 0) == -1) {
     Error::sendErrno("waitpid");
