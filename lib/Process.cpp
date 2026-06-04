@@ -44,7 +44,7 @@ DDB::StopReason::StopReason(int waitStatus) {
     info = WSTOPSIG(waitStatus);
   } else if (WIFCONTINUED(waitStatus)) {
     state = ProcessState::Running;
-    info = SIGCONT; // TODO: Verify this
+    info = 0;
   } else {
     // TODO: Handle unreachable
   }
