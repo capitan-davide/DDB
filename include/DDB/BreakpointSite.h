@@ -24,9 +24,9 @@ public:
   bool isEnabled() const { return m_isEnabled; }
 
   IdType id() const { return m_id; }
-  VirtAddr address() const { return m_addr; }
+  VirtAddr addr() const { return m_addr; }
 
-  bool atAddress(VirtAddr addr) const { return m_addr == addr; }
+  bool atAddr(VirtAddr addr) const { return m_addr == addr; }
   bool inRange(VirtAddr low, VirtAddr high) const {
     return low <= m_addr && m_addr < high;
   }

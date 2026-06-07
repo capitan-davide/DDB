@@ -17,6 +17,6 @@ add_subdirectory(tools)
 
 include(CTest)
 if(BUILD_TESTING)
-    find_package(Catch2 CONFIG REQUIRED)
-    add_subdirectory(test)
+  find_package(Catch2 CONFIG REQUIRED)
+  add_subdirectory(test)
 endif()

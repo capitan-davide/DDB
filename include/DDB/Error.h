@@ -23,10 +23,11 @@ private:
   UnreachableError(const std::string &what) : std::logic_error(what) {}
 };
 
-[[noreturn]] inline void unreachableInternal(const char *msg, const char *file, unsigned line) {
-    std::ostringstream oss;
-    oss << "[DDB_UNREACHABLE] " << file << ":" << line << ": " << msg;
-    UnreachableError::send(oss.str());
+[[noreturn]] inline void unreachableInternal(const char *msg, const char *file,
+                                             unsigned line) {
+  std::ostringstream oss;
+  oss << "[DDB_UNREACHABLE] " << file << ":" << line << ": " << msg;
+  UnreachableError::send(oss.str());
 }
 
 } // namespace DDB

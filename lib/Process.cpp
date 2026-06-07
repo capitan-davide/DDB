@@ -1,4 +1,5 @@
 #include "DDB/Process.h"
+#include "DDB/BreakpointSite.h"
 #include "DDB/Error.h"
 #include "DDB/Pipe.h"
 #include "DDB/RegisterInfo.h"
@@ -46,7 +47,7 @@ DDB::StopReason::StopReason(int waitStatus) {
     state = ProcessState::Running;
     info = 0;
   } else {
-    // TODO: Handle unreachable
+    DDB_UNREACHABLE("Invalid wait status");
   }
 }
 
@@ -86,8 +87,8 @@ std::unique_ptr<DDB::Process> DDB::Process::launch(std::filesystem::path path,
   }
 
   // The parent process closes the write end of the pipe then waits for the
-  // child to write to it in case of errors. When the child process also closes the
-  // write end, the read operation will return (see closeOnExec=true above).
+  // child to write to it in case of errors. When the child process also closes
+  // the write end, the read operation will return (see closeOnExec=true above).
   pipe.closeWrite();
   std::vector<std::byte> data = pipe.read();
   pipe.closeRead();
@@ -217,4 +218,13 @@ void DDB::Process::writeGPRs(const user_regs_struct &gprs) {
   if (ptrace(PTRACE_SETREGS, m_pid, nullptr, &gprs) == -1) {
     Error::sendErrno("ptrace(PTRACE_SETREGS)");
   }
+}
+
+DDB::BreakpointSite &DDB::Process::createBreakpointSite(VirtAddr addr) {
+  if (m_breakpointSites.containsAddr(addr)) {
+    Error::send("Breakpoint site already created at address " +
+                std::to_string(addr.addr()));
+  }
+  return m_breakpointSites.push(
+      std::unique_ptr<BreakpointSite>(new BreakpointSite(*this, addr)));
 }

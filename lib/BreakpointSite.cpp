@@ -8,7 +8,7 @@ DDB::BreakpointSite::IdType getNextId() {
 }
 } // namespace
 
-DDB::BreakpointSite::BreakpointSite(Process &proc, VirtAddr addr) :
-  m_proc(&proc), m_addr(addr), m_isEnabled(false), m_savedData() {
+DDB::BreakpointSite::BreakpointSite(Process &proc, VirtAddr addr)
+    : m_proc(&proc), m_addr(addr), m_isEnabled(false), m_savedData() {
   m_id = getNextId();
 }

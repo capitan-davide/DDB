@@ -3,12 +3,12 @@
 
 #include "DDB/BreakpointSite.h"
 #include "DDB/Registers.h"
+#include "DDB/StoppointCollection.h"
 #include "DDB/Types.h"
 
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <vector>
 
 #include <sys/types.h>
 #include <sys/user.h>
@@ -85,6 +85,13 @@ public:
     return VirtAddr(getRegisters().readByIdAs<U64>(RegisterId::rip));
   }
 
+  StoppointCollection<BreakpointSite> &breakpointSites() {
+    return m_breakpointSites;
+  }
+  const StoppointCollection<BreakpointSite> &breakpointSites() const {
+    return m_breakpointSites;
+  }
+
 private:
   Process(pid_t pid, bool termOnEnd, bool isAttached)
       : m_pid(pid), m_termOnEnd(termOnEnd), m_isAttached(isAttached),
@@ -107,7 +114,7 @@ private:
   /// The register set of this process.
   std::unique_ptr<Registers> m_registers;
 
-  std::vector<std::unique_ptr<BreakpointSite>> m_breakpointSites;
+  StoppointCollection<BreakpointSite> m_breakpointSites;
 };
 
 } // namespace DDB

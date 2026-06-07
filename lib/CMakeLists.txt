@@ -8,13 +8,11 @@ add_library(LibDDB
 
 add_library(DDB::LibDDB ALIAS LibDDB)
 
-set_target_properties(
-  LibDDB
+set_target_properties(LibDDB
   PROPERTIES OUTPUT_NAME DDB
 )
 
-target_compile_features(
-  LibDDB
+target_compile_features(LibDDB
   PUBLIC cxx_std_17
 )
 
