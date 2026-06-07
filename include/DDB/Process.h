@@ -1,12 +1,14 @@
 #ifndef DDB_PROCESS_H
 #define DDB_PROCESS_H
 
+#include "DDB/BreakpointSite.h"
 #include "DDB/Registers.h"
 #include "DDB/Types.h"
 
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include <sys/types.h>
 #include <sys/user.h>
@@ -73,6 +75,8 @@ public:
   /// @throws Error if the operation fails.
   void writeGPRs(const user_regs_struct &gprs);
 
+  BreakpointSite &createBreakpointSite(VirtAddr addr);
+
   pid_t pid() const { return m_pid; }
   ProcessState state() const { return m_state; }
   Registers &getRegisters() { return *m_registers; }
@@ -102,6 +106,8 @@ private:
 
   /// The register set of this process.
   std::unique_ptr<Registers> m_registers;
+
+  std::vector<std::unique_ptr<BreakpointSite>> m_breakpointSites;
 };
 
 } // namespace DDB

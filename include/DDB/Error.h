@@ -1,9 +1,9 @@
 #ifndef DBB_ERROR_H
 #define DBB_ERROR_H
 
+#include <sstream>
 #include <stdexcept>
 #include <string>
-#include <sstream>
 
 namespace DDB {
 class Error : public std::runtime_error {
@@ -38,4 +38,3 @@ private:
 #endif
 
 #endif // DBB_ERROR_H
-
