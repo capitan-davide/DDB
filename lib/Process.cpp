@@ -6,6 +6,7 @@
 #include "DDB/Types.h"
 
 #include <cerrno>
+#include <csignal>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
@@ -16,6 +17,7 @@
 #include <vector>
 
 #include <signal.h>
+#include <sys/personality.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -63,6 +65,11 @@ std::unique_ptr<DDB::Process> DDB::Process::launch(std::filesystem::path path,
 
   // If we are the child process, execute the target program.
   if (pid == 0) {
+    // Disable ASLR for processes that we launch so the address remain stable
+    // between program runs.
+    if (personality(ADDR_NO_RANDOMIZE) == -1) {
+      exitWithPError(pipe, "personality");
+    }
 
     // We don't need the read end of the pipe, we only write to it in case of
     // errors.
@@ -150,10 +157,47 @@ DDB::Process::~Process() {
 }
 
 void DDB::Process::resume() {
+  // To resume the execution we need to:
+  //   1. disable the breakpoint (i.e., restore the 'm_savedData')
+  //   2. step over a single instruction
+  //   3. re-enable the breakpoint
+  //   4. continue
+  VirtAddr pc = getPC();
+  if (m_breakpointSites.enabledAtAddr(pc)) {
+    BreakpointSite &bs = m_breakpointSites.getByAddr(pc);
+    bs.disable();
+    if (ptrace(PTRACE_SINGLESTEP, pid(), nullptr, nullptr) == -1) {
+      Error::sendErrno("ptrace(PTRACE_SINGLESTEP)");
+    }
+    int waitStatus;
+    if (waitpid(pid(), &waitStatus, 0) == -1) {
+      Error::sendErrno("waitpid");
+    }
+    bs.enable();
+  }
+
   if (ptrace(PTRACE_CONT, m_pid, nullptr, nullptr) == -1) {
     Error::sendErrno("ptrace(PTRACE_CONT)");
   }
   m_state = ProcessState::Running;
+}
+
+void DDB::Process::terminate() {
+  if (m_pid == 0)
+    return;
+
+  int waitStatus;
+  if (m_isAttached) {
+    if (m_state == ProcessState::Running) {
+      kill(m_pid, SIGSTOP);
+      waitpid(m_pid, &waitStatus, 0);
+    }
+    ptrace(PTRACE_DETACH, m_pid, nullptr, nullptr);
+    kill(m_pid, SIGCONT);
+  }
+
+  kill(m_pid, SIGKILL);
+  waitpid(m_pid, &waitStatus, 0);
 }
 
 DDB::StopReason DDB::Process::waitOnSignal() {
@@ -170,6 +214,14 @@ DDB::StopReason DDB::Process::waitOnSignal() {
 
   if (m_isAttached && m_state == ProcessState::Stopped) {
     readAllRegisters();
+
+    // If we stopped because we hit a breakpoint, we should fix up the program
+    // counter to point to the breakpoint. This is required because, to resume
+    // the program later on.
+    VirtAddr instrBegin = getPC() - 1;
+    if (reason.info == SIGTRAP && breakpointSites().enabledAtAddr(instrBegin)) {
+      setPC(instrBegin);
+    }
   }
 
   return reason;

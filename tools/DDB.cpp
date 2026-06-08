@@ -1,13 +1,14 @@
+#include "DDB/BreakpointSite.h"
 #include "DDB/Error.h"
 #include "DDB/Parse.h"
 #include "DDB/Process.h"
 #include "DDB/RegisterInfo.h"
+#include "DDB/Types.h"
 
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fmt/base.h>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -34,6 +35,8 @@ void mainLoop(std::unique_ptr<DDB::Process> &proc);
 void handleCommand(std::unique_ptr<DDB::Process> &proc, std::string_view line);
 void handleRegisterCommand(DDB::Process &proc,
                            const std::vector<std::string> &args);
+void handleBreakpointCommand(DDB::Process &proc,
+                             const std::vector<std::string> &args);
 void handleRegisterRead(DDB::Process &proc,
                         const std::vector<std::string> &args);
 void handleRegisterWrite(DDB::Process &proc,
@@ -75,7 +78,9 @@ std::unique_ptr<DDB::Process> attach(int argc, const char *argv[]) {
     return DDB::Process::attach(pid);
   } else {
     const char *progPath = argv[1];
-    return DDB::Process::launch(progPath);
+    auto proc = DDB::Process::launch(progPath);
+    fmt::println("Launched process with PID {}", proc->pid());
+    return proc;
   }
 }
 
@@ -115,6 +120,8 @@ void handleCommand(std::unique_ptr<DDB::Process> &proc, std::string_view line) {
     printStopReason(*proc, reason);
   } else if (isPrefix(cmd, "register")) {
     handleRegisterCommand(*proc, args);
+  } else if (isPrefix(cmd, "breakpoint")) {
+    handleBreakpointCommand(*proc, args);
   } else if (isPrefix(cmd, "help")) {
     printHelp(args);
   } else if (isPrefix(cmd, "quit")) {
@@ -140,6 +147,54 @@ void handleRegisterCommand(DDB::Process &proc,
   }
 }
 
+void handleBreakpointCommand(DDB::Process &proc,
+                             const std::vector<std::string> &args) {
+  if (args.size() < 2) {
+    printHelp({"help", "breakpoint"});
+    return;
+  }
+
+  std::string cmd = args[1];
+
+  if (isPrefix(cmd, "list")) {
+    if (proc.breakpointSites().empty()) {
+      fmt::println("No breakpoints set");
+    } else {
+      fmt::println("Current breakpoints:");
+      proc.breakpointSites().forEach([](auto &bs) {
+        fmt::println("{}: addr = {:#x}, {}", bs.id(), bs.addr().asInt(),
+                     bs.isEnabled() ? "enabled" : "disabled");
+      });
+    }
+    return;
+  }
+
+  if (args.size() < 3) {
+    printHelp({"help", "breakpoint"});
+    return;
+  }
+
+  if (isPrefix(cmd, "set")) {
+    std::optional addr = DDB::toIntegral<U64>(args[2], 16);
+    if (!addr) {
+      fmt::println(stderr, "Breakpoint commands expects address in "
+                           "hexadecimal, prefixed with '0x'");
+      return;
+    }
+    proc.createBreakpointSite(DDB::VirtAddr(*addr)).enable();
+    return;
+  }
+
+  std::optional id = DDB::toIntegral<DDB::BreakpointSite::IdType>(args[2]);
+  if (isPrefix(cmd, "enable")) {
+    proc.breakpointSites().getById(*id).enable();
+  } else if (isPrefix(cmd, "disable")) {
+    proc.breakpointSites().getById(*id).disable();
+  } else if (isPrefix(cmd, "delete")) {
+    proc.breakpointSites().removeById(*id);
+  }
+}
+
 void handleRegisterRead(DDB::Process &proc,
                         const std::vector<std::string> &args) {
   auto format = [](auto t) {
@@ -160,13 +215,13 @@ void handleRegisterRead(DDB::Process &proc,
       if (!shouldPrint)
         continue;
       DDB::Registers::Value value = proc.getRegisters().read(info);
-      fmt::print("{}:\t{}\n", info.name, std::visit(format, value));
+      fmt::println("{}:\t{}", info.name, std::visit(format, value));
     }
   } else if (args.size() == 3) {
     try {
       const DDB::RegisterInfo &info = DDB::registerInfoByName(args[2]);
       DDB::Registers::Value value = proc.getRegisters().read(info);
-      fmt::print("{}:\t{}\n", info.name, std::visit(format, value));
+      fmt::println("{}:\t{}", info.name, std::visit(format, value));
     } catch (DDB::Error &err) {
       std::cerr << "No such register\n";
       return;
@@ -210,6 +265,7 @@ void handleQuitCommand(DDB::Process &proc,
     }
   }
 
+  proc.terminate();
   std::exit(status);
 }
 
@@ -259,12 +315,13 @@ void printStopReason(const DDB::Process &proc, DDB::StopReason reason) {
   default:
     break;
   }
-  fmt::print("Process {} {}\n", proc.pid(), msg);
+  fmt::println("Process {} {}", proc.pid(), msg);
 }
 
 void printHelp(const std::vector<std::string> &args) {
   if (args.size() == 1) {
     std::cerr << R"(Debugger commands:
+  breakpoint  - Commands for operating on breakpoints
   continue    - Resume the process
   quit        - Quit the DDB debugger
   register    - Commands for operating on registers
@@ -275,6 +332,14 @@ void printHelp(const std::vector<std::string> &args) {
   read <register>
   read all
   write <register> <value>
+)";
+  } else if (isPrefix(args[1], "breakpoint")) {
+    std::cerr << R"(Debugger commands:
+  list
+  delete <id>
+  disable <id>
+  enable <id>
+  set <addr>
 )";
   } else if (isPrefix(args[1], "quit")) {
     std::cerr << R"(Debubber commands:

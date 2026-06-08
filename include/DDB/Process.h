@@ -52,6 +52,9 @@ public:
   ///         running, or has exited).
   void resume();
 
+  /// Terminate the traced process.
+  void terminate();
+
   /// Block until a process terminates. If the process is being traced, also
   /// returns when the process stops due to a signal (e.g., SIGTRAP).
   /// @return A StopReason struct describing how the process stopped or
@@ -83,6 +86,9 @@ public:
   const Registers &getRegisters() const { return *m_registers; }
   VirtAddr getPC() const {
     return VirtAddr(getRegisters().readByIdAs<U64>(RegisterId::rip));
+  }
+  void setPC(VirtAddr addr) {
+    getRegisters().writeById(RegisterId::rip, addr.asInt());
   }
 
   StoppointCollection<BreakpointSite> &breakpointSites() {
