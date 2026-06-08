@@ -223,7 +223,7 @@ void DDB::Process::writeGPRs(const user_regs_struct &gprs) {
 DDB::BreakpointSite &DDB::Process::createBreakpointSite(VirtAddr addr) {
   if (m_breakpointSites.containsAddr(addr)) {
     Error::send("Breakpoint site already created at address " +
-                std::to_string(addr.addr()));
+                std::to_string(addr.asInt()));
   }
   return m_breakpointSites.push(
       std::unique_ptr<BreakpointSite>(new BreakpointSite(*this, addr)));

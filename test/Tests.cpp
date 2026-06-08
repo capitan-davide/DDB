@@ -1,4 +1,5 @@
 #include "DDB/Bit.h"
+#include "DDB/BreakpointSite.h"
 #include "DDB/Error.h"
 #include "DDB/Pipe.h"
 #include "DDB/Process.h"
@@ -170,4 +171,102 @@ TEST_CASE("Read register works", "[Register]") {
   proc->waitOnSignal();
 
   REQUIRE(regs.readByIdAs<F128>(RegisterId::st0) == 64.125L);
+}
+
+TEST_CASE("Can create breakpoint site", "[Breakpoint]") {
+  auto proc = Process::launch("targets/run-endlessly");
+  BreakpointSite &bs = proc->createBreakpointSite(VirtAddr(42));
+  REQUIRE(bs.addr().asInt() == 42);
+}
+
+TEST_CASE("Breakpointside IDs increase", "[Breakpont]") {
+  auto proc = Process::launch("targets/run-endlessly");
+
+  auto &bs1 = proc->createBreakpointSite(VirtAddr(42));
+  REQUIRE(bs1.addr().asInt() == 42);
+
+  auto &bs2 = proc->createBreakpointSite(VirtAddr(43));
+  REQUIRE(bs2.id() == bs1.id() + 1);
+
+  auto &bs3 = proc->createBreakpointSite(VirtAddr(44));
+  REQUIRE(bs3.id() == bs2.id() + 1);
+
+  auto &bs4 = proc->createBreakpointSite(VirtAddr(45));
+  REQUIRE(bs4.id() == bs3.id() + 1);
+}
+
+TEST_CASE("Can find breakpoint site", "[Breakpoint]") {
+  auto proc = Process::launch("targets/run-endlessly");
+  const auto &cproc = proc;
+
+  proc->createBreakpointSite(VirtAddr(42));
+  proc->createBreakpointSite(VirtAddr(43));
+  proc->createBreakpointSite(VirtAddr(44));
+  proc->createBreakpointSite(VirtAddr(45));
+
+  auto &s1 = proc->breakpointSites().getByAddr(VirtAddr(44));
+  REQUIRE(proc->breakpointSites().containsAddr(VirtAddr(44)));
+  REQUIRE(s1.addr().asInt() == 44);
+
+  auto &cs1 = cproc->breakpointSites().getByAddr(VirtAddr(44));
+  REQUIRE(cproc->breakpointSites().containsAddr(VirtAddr(44)));
+  REQUIRE(cs1.addr().asInt() == 44);
+
+  auto &s2 = proc->breakpointSites().getById(s1.id() + 1);
+  REQUIRE(proc->breakpointSites().containsId(s1.id() + 1));
+  REQUIRE(s2.id() == s1.id() + 1);
+  REQUIRE(s2.addr().asInt() == 45);
+
+  auto &cs2 = cproc->breakpointSites().getById(cs1.id() + 1);
+  REQUIRE(cproc->breakpointSites().containsId(cs1.id() + 1));
+  REQUIRE(cs2.id() == cs1.id() + 1);
+  REQUIRE(cs2.addr().asInt() == 45);
+}
+
+TEST_CASE("Cannot find breakpoint site", "[Breakpoint]") {
+  auto proc = Process::launch("targets/run-endlessly");
+  const auto &cproc = proc;
+
+  REQUIRE_THROWS_AS(proc->breakpointSites().getByAddr(VirtAddr(44)), Error);
+  REQUIRE_THROWS_AS(proc->breakpointSites().getById(44), Error);
+  REQUIRE_THROWS_AS(cproc->breakpointSites().getByAddr(VirtAddr(44)), Error);
+  REQUIRE_THROWS_AS(cproc->breakpointSites().getById(44), Error);
+}
+
+TEST_CASE("Breakpoint site list size and emptiness", "[Breakpont]") {
+  auto proc = Process::launch("targets/run-endlessly");
+  const auto &cproc = proc;
+
+  REQUIRE(proc->breakpointSites().empty());
+  REQUIRE(proc->breakpointSites().size() == 0);
+  REQUIRE(cproc->breakpointSites().empty());
+  REQUIRE(cproc->breakpointSites().size() == 0);
+
+  proc->createBreakpointSite(VirtAddr(42));
+  REQUIRE(!proc->breakpointSites().empty());
+  REQUIRE(proc->breakpointSites().size() == 1);
+  REQUIRE(!cproc->breakpointSites().empty());
+  REQUIRE(cproc->breakpointSites().size() == 1);
+
+  proc->createBreakpointSite(VirtAddr(43));
+  REQUIRE(!proc->breakpointSites().empty());
+  REQUIRE(proc->breakpointSites().size() == 2);
+  REQUIRE(!cproc->breakpointSites().empty());
+  REQUIRE(cproc->breakpointSites().size() == 2);
+}
+
+TEST_CASE("Can iterate breakpoint sites", "[Breakpont]") {
+  auto proc = Process::launch("targets/run-endlessly");
+  const auto &cproc = proc;
+
+  proc->createBreakpointSite(VirtAddr(42));
+  proc->createBreakpointSite(VirtAddr(43));
+  proc->createBreakpointSite(VirtAddr(44));
+  proc->createBreakpointSite(VirtAddr(45));
+
+  proc->breakpointSites().forEach(
+      [addr = 42](auto &bs) mutable { REQUIRE(bs.addr().asInt() == addr++); });
+
+  cproc->breakpointSites().forEach(
+      [addr = 42](auto &bs) mutable { REQUIRE(bs.addr().asInt() == addr++); });
 }

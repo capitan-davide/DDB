@@ -254,7 +254,7 @@ void printStopReason(const DDB::Process &proc, DDB::StopReason reason) {
     break;
   case DDB::ProcessState::Stopped:
     msg = fmt::format("stopped with signal {} at {:#x}",
-                      sigabbrev_np(reason.info), proc.getPC().addr());
+                      sigabbrev_np(reason.info), proc.getPC().asInt());
     break;
   default:
     break;

@@ -27,7 +27,7 @@ public:
   VirtAddr() = default;
   explicit VirtAddr(U64 addr) : m_addr(addr) {}
 
-  U64 addr() const { return m_addr; }
+  U64 asInt() const { return m_addr; }
 
   VirtAddr operator+(U64 offs) const { return VirtAddr(m_addr + offs); }
   VirtAddr operator-(U64 offs) const { return VirtAddr(m_addr - offs); }
