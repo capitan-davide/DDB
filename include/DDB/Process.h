@@ -78,7 +78,13 @@ public:
   /// @throws Error if the operation fails.
   void writeGPRs(const user_regs_struct &gprs);
 
+  /// TODO: Write documentation.
   BreakpointSite &createBreakpointSite(VirtAddr addr);
+
+  /// Step over a single machine instruction.
+  /// @return A StopReason struct describing why the process stopped after
+  ///         stepping.
+  StopReason stepInstruction();
 
   pid_t pid() const { return m_pid; }
   ProcessState state() const { return m_state; }

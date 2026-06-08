@@ -35,12 +35,14 @@ void mainLoop(std::unique_ptr<DDB::Process> &proc);
 void handleCommand(std::unique_ptr<DDB::Process> &proc, std::string_view line);
 void handleRegisterCommand(DDB::Process &proc,
                            const std::vector<std::string> &args);
-void handleBreakpointCommand(DDB::Process &proc,
-                             const std::vector<std::string> &args);
 void handleRegisterRead(DDB::Process &proc,
                         const std::vector<std::string> &args);
 void handleRegisterWrite(DDB::Process &proc,
                          const std::vector<std::string> &args);
+void handleBreakpointCommand(DDB::Process &proc,
+                             const std::vector<std::string> &args);
+void handleStepCommand(DDB::Process &proc,
+                       const std::vector<std::string> &args);
 void handleQuitCommand(DDB::Process &proc,
                        const std::vector<std::string> &args);
 DDB::Registers::Value parseRegisterValue(DDB::RegisterInfo info,
@@ -122,6 +124,8 @@ void handleCommand(std::unique_ptr<DDB::Process> &proc, std::string_view line) {
     handleRegisterCommand(*proc, args);
   } else if (isPrefix(cmd, "breakpoint")) {
     handleBreakpointCommand(*proc, args);
+  } else if (isPrefix(cmd, "step")) {
+    handleStepCommand(*proc, args);
   } else if (isPrefix(cmd, "help")) {
     printHelp(args);
   } else if (isPrefix(cmd, "quit")) {
@@ -248,6 +252,12 @@ void handleRegisterWrite(DDB::Process &proc,
   }
 }
 
+void handleStepCommand(DDB::Process &proc,
+                       const std::vector<std::string> &args) {
+  DDB::StopReason reason = proc.stepInstruction();
+  printStopReason(proc, reason);
+}
+
 void handleQuitCommand(DDB::Process &proc,
                        const std::vector<std::string> &args) {
   if (args.size() > 2) {
@@ -325,6 +335,7 @@ void printHelp(const std::vector<std::string> &args) {
   continue    - Resume the process
   quit        - Quit the DDB debugger
   register    - Commands for operating on registers
+  step        - Step over a single instruction
 )";
   } else if (isPrefix(args[1], "register")) {
     std::cerr << R"(Debugger commands:

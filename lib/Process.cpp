@@ -12,6 +12,7 @@
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -279,4 +280,24 @@ DDB::BreakpointSite &DDB::Process::createBreakpointSite(VirtAddr addr) {
   }
   return m_breakpointSites.push(
       std::unique_ptr<BreakpointSite>(new BreakpointSite(*this, addr)));
+}
+
+DDB::StopReason DDB::Process::stepInstruction() {
+  std::optional<BreakpointSite *> toReenable;
+  VirtAddr pc = getPC();
+  if (m_breakpointSites.enabledAtAddr(pc)) {
+    BreakpointSite &bs = m_breakpointSites.getByAddr(pc);
+    bs.disable();
+    toReenable = &bs;
+  }
+
+  if (ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, nullptr)) {
+    Error::sendErrno("ptrace(PTRACE_SINGLESTEP)");
+  }
+  StopReason reason = waitOnSignal();
+
+  if (toReenable) {
+    toReenable.value()->enable();
+  }
+  return reason;
 }
