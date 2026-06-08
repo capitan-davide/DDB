@@ -8,11 +8,18 @@
 #include "DDB/Types.h"
 
 #include <cerrno>
+#include <csignal>
+#include <cstddef>
+#include <cstdio>
+#include <filesystem>
 #include <fstream>
+#include <regex>
 #include <string>
 
 #include <signal.h>
 #include <sys/types.h>
+
+#include <elf.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -31,6 +38,62 @@ char getProcessStatus(pid_t pid) {
   std::size_t lastParenPos = line.rfind(')');
   std::size_t statusCharPos = lastParenPos + 2;
   return line[statusCharPos];
+}
+
+U64 getSectionLoadBias(std::filesystem::path path, Elf64_Addr fileAddr) {
+  std::string cmd = "readelf -WS " + path.string();
+  std::FILE *pipe = ::popen(cmd.c_str(), "r");
+
+  std::regex textRefex(R"(PROGBITS\s+(\w+)\s+(\w+)\s+(\w+))");
+  char *line = nullptr;
+  std::size_t len = 0;
+  while (::getline(&line, &len, pipe) != -1) {
+    std::cmatch groups;
+    if (std::regex_search(line, groups, textRefex)) {
+      long addr = std::stol(groups[1], nullptr, 16);
+      long offs = std::stol(groups[2], nullptr, 16);
+      long size = std::stol(groups[3], nullptr, 16);
+      if (addr <= fileAddr && fileAddr < (addr + size)) {
+        ::free(line);
+        ::pclose(pipe);
+        return addr - offs;
+      }
+    }
+    ::free(line);
+    line = nullptr;
+  }
+
+  ::pclose(pipe);
+  DDB::Error::send("Could not find section load bias");
+}
+
+U64 getEntryPointOffset(std::filesystem::path path) {
+  std::ifstream elfFile(path);
+
+  Elf64_Ehdr header;
+  elfFile.read(reinterpret_cast<char *>(&header), sizeof(header));
+
+  Elf64_Addr entryFileAddr = header.e_entry;
+  U64 loadBias = getSectionLoadBias(path, entryFileAddr);
+  return entryFileAddr - loadBias;
+}
+
+VirtAddr getLoadAddr(pid_t pid, U64 offs) {
+  std::ifstream maps("/proc/" + std::to_string(pid) + "/maps");
+  std::regex mapRegex(R"((\w+)-\w+ ..(.). (\w+))");
+
+  std::string data;
+  while (std::getline(maps, data)) {
+    std::smatch groups;
+    std::regex_search(data, groups, mapRegex);
+
+    if (groups[2] == 'x') {
+      long lowRange = std::stol(groups[1], nullptr, 16);
+      long fileOffs = std::stol(groups[3], nullptr, 16);
+      return VirtAddr(offs - fileOffs + lowRange);
+    }
+  }
+  Error::send("Could not find load address");
 }
 } // namespace
 
@@ -269,4 +332,44 @@ TEST_CASE("Can iterate breakpoint sites", "[Breakpont]") {
 
   cproc->breakpointSites().forEach(
       [addr = 42](auto &bs) mutable { REQUIRE(bs.addr().asInt() == addr++); });
+}
+
+TEST_CASE("Breakpoint on address works", "[Breakpoint]") {
+  DDB::Pipe pipe(/*closeOnExec=*/false);
+
+  auto proc = DDB::Process::launch("targets/hello-ddb", /*debug=*/true,
+                                   /*outFd=*/pipe.getWrite());
+  pipe.closeWrite();
+
+  U64 offs = getEntryPointOffset("targets/hello-ddb");
+  VirtAddr loadAddr = getLoadAddr(proc->pid(), offs);
+
+  proc->createBreakpointSite(loadAddr).enable();
+  proc->resume();
+  StopReason reason = proc->waitOnSignal();
+
+  REQUIRE(reason.state == ProcessState::Stopped);
+  REQUIRE(reason.info == SIGTRAP);
+  REQUIRE(proc->getPC() == loadAddr);
+
+  proc->resume();
+  reason = proc->waitOnSignal();
+
+  REQUIRE(reason.state == ProcessState::Exited);
+  REQUIRE(reason.info == 0);
+
+  std::vector<std::byte> data = pipe.read();
+  REQUIRE(toStringView(data) == "Hello, DDB!\n");
+}
+
+TEST_CASE("Can remove breakpoint sites", "[Breakpoint]") {
+  auto proc = DDB::Process::launch("targets/run-endlessly");
+
+  BreakpointSite &bs = proc->createBreakpointSite(VirtAddr(42));
+  proc->createBreakpointSite(VirtAddr(43));
+  REQUIRE(proc->breakpointSites().size() == 2);
+
+  proc->breakpointSites().removeById(bs.id());
+  proc->breakpointSites().removeByAddr(VirtAddr(43));
+  REQUIRE(proc->breakpointSites().empty());
 }
