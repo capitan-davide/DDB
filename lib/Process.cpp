@@ -1,4 +1,5 @@
 #include "DDB/Process.h"
+#include "DDB/Bit.h"
 #include "DDB/BreakpointSite.h"
 #include "DDB/Error.h"
 #include "DDB/Pipe.h"
@@ -21,6 +22,7 @@
 #include <sys/personality.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -300,4 +302,53 @@ DDB::StopReason DDB::Process::stepInstruction() {
     toReenable.value()->enable();
   }
   return reason;
+}
+
+std::vector<std::byte> DDB::Process::readMemory(VirtAddr addr,
+                                                std::size_t nBytes) const {
+  std::vector<std::byte> ret(nBytes);
+
+  const struct iovec localDesc = {.iov_base = ret.data(),
+                                  .iov_len = ret.size()};
+
+  std::vector<struct iovec> remoteDescs;
+  while (nBytes > 0) {
+    U64 upToNextPage = 0x1000 - (addr.asInt() & 0xfff); // FIXME: Page size?
+    U64 chunkSize = std::min(nBytes, upToNextPage);
+    remoteDescs.push_back({.iov_base = reinterpret_cast<void *>(addr.asInt()),
+                           .iov_len = chunkSize});
+    nBytes -= chunkSize;
+    addr += chunkSize;
+  }
+
+  if (process_vm_readv(m_pid, &localDesc, /*liovcnt=*/1, remoteDescs.data(),
+                       remoteDescs.size(), /*flags=*/0) == -1) {
+    Error::sendErrno("process_vm_readv");
+  }
+  return ret;
+}
+
+void DDB::Process::writeMemory(VirtAddr addr,
+                               Span<const std::byte> data) const {
+  // We cannot use 'process_vm_writev' here because this function doesn't
+  // support writing to protected aread of memory like code segments.
+  std::size_t nWritten = 0;
+  while (nWritten < data.size()) {
+    std::size_t rem = data.size() - nWritten;
+    U64 word;
+    if (rem >= 8) {
+      word = fromBytes<U64>(data.begin() + nWritten);
+    } else {
+      // If we have less than 8 bytes left, we need to handle a partial memory
+      // write. This is because ptrace can only write exactly 8 bytes at a time.
+      std::vector<std::byte> read = readMemory(addr + nWritten, 8);
+      auto wordData = reinterpret_cast<char *>(&word);
+      std::memcpy(wordData, data.begin() + nWritten, rem);
+      std::memcpy(wordData + rem, read.data() + rem, 8 - rem);
+    }
+    if (ptrace(PTRACE_POKEDATA, m_pid, addr + nWritten, word) == -1) {
+      Error::sendErrno("Failed to write memory");
+    }
+    nWritten += 8;
+  }
 }

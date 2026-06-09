@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 namespace DDB {
 template <class I>
@@ -46,31 +47,57 @@ template <class F> std::optional<F> toFloat(std::string_view sv) {
 
 template <std::size_t N>
 std::array<std::byte, N> parseVector(std::string_view text) {
-  auto invalidFormat = [] { DDB::Error::send("Invalid format"); };
+  auto sendInvalidFormat = [] { DDB::Error::send("Invalid format"); };
 
   std::array<std::byte, N> bytes;
   const char *c = text.data();
 
   if (*c++ != '[') {
-    invalidFormat();
+    sendInvalidFormat();
   }
 
   for (std::size_t i = 0; i < N - 1; ++i) {
     bytes[i] = toIntegral<std::byte>({c, 4}, 16).value();
     c += 4;
     if (*c++ != ',') {
-      invalidFormat();
+      sendInvalidFormat();
     }
   }
   bytes[N - 1] = toIntegral<std::byte>({c, 4}, 16).value();
   c += 4;
 
   if (*c++ != ']') {
-    invalidFormat();
+    sendInvalidFormat();
   }
   if (c != text.end()) {
-    invalidFormat();
+    sendInvalidFormat();
   }
+
+  return bytes;
+}
+
+inline std::vector<std::byte> parseVector(std::string_view text) {
+  auto sendInvalidFormat = [] { DDB::Error::send("Invalid format"); };
+
+  std::vector<std::byte> bytes;
+  const char *c = text.data();
+
+  if (*c++ != '[')
+    sendInvalidFormat();
+
+  while (*c != ']') {
+    auto byte = DDB::toIntegral<std::byte>({c, 4}, 16);
+    bytes.push_back(byte.value());
+    c += 4;
+
+    if (*c == ',')
+      ++c;
+    else if (*c != ']')
+      sendInvalidFormat();
+  }
+
+  if (++c != text.end())
+    sendInvalidFormat();
 
   return bytes;
 }

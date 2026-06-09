@@ -1,14 +1,17 @@
 #ifndef DDB_PROCESS_H
 #define DDB_PROCESS_H
 
+#include "DDB/Bit.h"
 #include "DDB/BreakpointSite.h"
 #include "DDB/Registers.h"
 #include "DDB/StoppointCollection.h"
 #include "DDB/Types.h"
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include <sys/types.h>
 #include <sys/user.h>
@@ -86,10 +89,19 @@ public:
   ///         stepping.
   StopReason stepInstruction();
 
+  std::vector<std::byte> readMemory(VirtAddr addr, std::size_t nBytes) const;
+  void writeMemory(VirtAddr addr, Span<const std::byte> data) const;
+
+  template <class T> T readMemoryAs(VirtAddr addr) const {
+    std::vector<std::byte> data = readMemory(addr, sizeof(T));
+    return fromBytes<T>(data.data());
+  }
+
   pid_t pid() const { return m_pid; }
   ProcessState state() const { return m_state; }
   Registers &getRegisters() { return *m_registers; }
   const Registers &getRegisters() const { return *m_registers; }
+
   VirtAddr getPC() const {
     return VirtAddr(getRegisters().readByIdAs<U64>(RegisterId::rip));
   }

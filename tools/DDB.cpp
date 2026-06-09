@@ -6,10 +6,13 @@
 #include "DDB/Types.h"
 
 #include <algorithm>
+#include <cctype>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -43,6 +46,12 @@ void handleBreakpointCommand(DDB::Process &proc,
                              const std::vector<std::string> &args);
 void handleStepCommand(DDB::Process &proc,
                        const std::vector<std::string> &args);
+void handleMemoryCommand(DDB::Process &proc,
+                         const std::vector<std::string> &args);
+void handleMemoryReadCommand(DDB::Process &proc,
+                             const std::vector<std::string> &args);
+void handleMemoryWriteCommand(DDB::Process &proc,
+                              const std::vector<std::string> &args);
 void handleQuitCommand(DDB::Process &proc,
                        const std::vector<std::string> &args);
 DDB::Registers::Value parseRegisterValue(DDB::RegisterInfo info,
@@ -126,6 +135,8 @@ void handleCommand(std::unique_ptr<DDB::Process> &proc, std::string_view line) {
     handleBreakpointCommand(*proc, args);
   } else if (isPrefix(cmd, "step")) {
     handleStepCommand(*proc, args);
+  } else if (isPrefix(cmd, "memory")) {
+    handleMemoryCommand(*proc, args);
   } else if (isPrefix(cmd, "help")) {
     printHelp(args);
   } else if (isPrefix(cmd, "quit")) {
@@ -148,54 +159,6 @@ void handleRegisterCommand(DDB::Process &proc,
     handleRegisterWrite(proc, args);
   } else {
     printHelp({"help", "register"});
-  }
-}
-
-void handleBreakpointCommand(DDB::Process &proc,
-                             const std::vector<std::string> &args) {
-  if (args.size() < 2) {
-    printHelp({"help", "breakpoint"});
-    return;
-  }
-
-  std::string cmd = args[1];
-
-  if (isPrefix(cmd, "list")) {
-    if (proc.breakpointSites().empty()) {
-      fmt::println("No breakpoints set");
-    } else {
-      fmt::println("Current breakpoints:");
-      proc.breakpointSites().forEach([](auto &bs) {
-        fmt::println("{}: addr = {:#x}, {}", bs.id(), bs.addr().asInt(),
-                     bs.isEnabled() ? "enabled" : "disabled");
-      });
-    }
-    return;
-  }
-
-  if (args.size() < 3) {
-    printHelp({"help", "breakpoint"});
-    return;
-  }
-
-  if (isPrefix(cmd, "set")) {
-    std::optional addr = DDB::toIntegral<U64>(args[2], 16);
-    if (!addr) {
-      fmt::println(stderr, "Breakpoint commands expects address in "
-                           "hexadecimal, prefixed with '0x'");
-      return;
-    }
-    proc.createBreakpointSite(DDB::VirtAddr(*addr)).enable();
-    return;
-  }
-
-  std::optional id = DDB::toIntegral<DDB::BreakpointSite::IdType>(args[2]);
-  if (isPrefix(cmd, "enable")) {
-    proc.breakpointSites().getById(*id).enable();
-  } else if (isPrefix(cmd, "disable")) {
-    proc.breakpointSites().getById(*id).disable();
-  } else if (isPrefix(cmd, "delete")) {
-    proc.breakpointSites().removeById(*id);
   }
 }
 
@@ -252,10 +215,120 @@ void handleRegisterWrite(DDB::Process &proc,
   }
 }
 
+void handleBreakpointCommand(DDB::Process &proc,
+                             const std::vector<std::string> &args) {
+  if (args.size() < 2) {
+    printHelp({"help", "breakpoint"});
+    return;
+  }
+
+  std::string cmd = args[1];
+
+  if (isPrefix(cmd, "list")) {
+    if (proc.breakpointSites().empty()) {
+      fmt::println("No breakpoints set");
+    } else {
+      fmt::println("Current breakpoints:");
+      proc.breakpointSites().forEach([](auto &bs) {
+        fmt::println("{}: addr = {:#x}, {}", bs.id(), bs.addr().asInt(),
+                     bs.isEnabled() ? "enabled" : "disabled");
+      });
+    }
+    return;
+  }
+
+  if (args.size() < 3) {
+    printHelp({"help", "breakpoint"});
+    return;
+  }
+
+  if (isPrefix(cmd, "set")) {
+    std::optional addr = DDB::toIntegral<U64>(args[2], 16);
+    if (!addr) {
+      fmt::println(stderr, "Breakpoint commands expects address in "
+                           "hexadecimal, prefixed with '0x'");
+      return;
+    }
+    proc.createBreakpointSite(DDB::VirtAddr(*addr)).enable();
+    return;
+  }
+
+  std::optional id = DDB::toIntegral<DDB::BreakpointSite::IdType>(args[2]);
+  if (isPrefix(cmd, "enable")) {
+    proc.breakpointSites().getById(*id).enable();
+  } else if (isPrefix(cmd, "disable")) {
+    proc.breakpointSites().getById(*id).disable();
+  } else if (isPrefix(cmd, "delete")) {
+    proc.breakpointSites().removeById(*id);
+  }
+}
+
 void handleStepCommand(DDB::Process &proc,
                        const std::vector<std::string> &args) {
   DDB::StopReason reason = proc.stepInstruction();
   printStopReason(proc, reason);
+}
+
+void handleMemoryCommand(DDB::Process &proc,
+                         const std::vector<std::string> &args) {
+  if (args.size() < 3) {
+    printHelp({"help", "memory"});
+    return;
+  }
+  if (isPrefix(args[1], "read")) {
+    handleMemoryReadCommand(proc, args);
+  } else if (isPrefix(args[1], "write")) {
+    handleMemoryWriteCommand(proc, args);
+  } else {
+    printHelp({"help", "memory"});
+  }
+}
+
+void handleMemoryReadCommand(DDB::Process &proc,
+                             const std::vector<std::string> &args) {
+  auto toPrintableRange = [](auto begin, auto end) {
+    std::string str(begin, end);
+    std::for_each(str.begin(), str.end(), [](auto &c) {
+      if (!std::isprint(c))
+        c = '.';
+    });
+    return str;
+  };
+
+  auto addr = DDB::toIntegral<U64>(args[2], 16);
+  if (!addr)
+    DDB::Error::send("Invalid address format");
+
+  int nBytes = 32;
+  if (args.size() == 4) {
+    auto nBytesArg = DDB::toIntegral<std::size_t>(args[3]);
+    if (!nBytesArg)
+      DDB::Error::send("Invalid number of bytes");
+    nBytes = *nBytesArg;
+  }
+
+  std::vector<std::byte> data = proc.readMemory(DDB::VirtAddr(*addr), nBytes);
+  for (std::size_t i = 0; i < data.size(); i += 16) {
+    auto begin = data.begin() + i;
+    auto end = data.begin() + std::min(i + 16, data.size());
+    fmt::println("{:#016x}: {:02x} {}", *addr + i, fmt::join(begin, end, " "),
+                 toPrintableRange(begin, end));
+  }
+}
+
+void handleMemoryWriteCommand(DDB::Process &proc,
+                              const std::vector<std::string> &args) {
+  if (args.size() != 4) {
+    printHelp({"help", "memory"});
+    return;
+  }
+
+  auto addr = DDB::toIntegral<U64>(args[2], 16);
+  if (!addr)
+    DDB::Error::send("Invalid address format");
+
+  std::vector<std::byte> data = DDB::parseVector(args[3]);
+  proc.writeMemory(DDB::VirtAddr(*addr), data);
 }
 
 void handleQuitCommand(DDB::Process &proc,
@@ -333,6 +406,7 @@ void printHelp(const std::vector<std::string> &args) {
     std::cerr << R"(Debugger commands:
   breakpoint  - Commands for operating on breakpoints
   continue    - Resume the process
+  memory      - Commands for operating on memory
   quit        - Quit the DDB debugger
   register    - Commands for operating on registers
   step        - Step over a single instruction
@@ -351,6 +425,12 @@ void printHelp(const std::vector<std::string> &args) {
   disable <id>
   enable <id>
   set <addr>
+)";
+  } else if (isPrefix(args[1], "memory")) {
+    std::cerr << R"(Debugger commands:
+  read <addr>
+  read <addr> <number-of-bytes>
+  write <addr> <bytes>
 )";
   } else if (isPrefix(args[1], "quit")) {
     std::cerr << R"(Debubber commands:
