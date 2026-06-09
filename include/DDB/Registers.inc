@@ -8,22 +8,6 @@
   REG(name, dwarfId, 8, GPR_OFFSET(name), RegisterType::GPR,                   \
       RegisterFormat::UInt)
 
-#define GPR_32(name, super)                                                    \
-  REG(name, -1, 4, GPR_OFFSET(super), RegisterType::SubGPR,                    \
-      RegisterFormat::UInt)
-
-#define GPR_16(name, super)                                                    \
-  REG(name, -1, 2, GPR_OFFSET(super), RegisterType::SubGPR,                    \
-      RegisterFormat::UInt)
-
-#define GPR_8H(name, super)                                                    \
-  REG(name, -1, 1, GPR_OFFSET(super) + 1, RegisterType::SubGPR,                \
-      RegisterFormat::UInt)
-
-#define GPR_8L(name, super)                                                    \
-  REG(name, -1, 1, GPR_OFFSET(super), RegisterType::SubGPR,                    \
-      RegisterFormat::UInt)
-
 GPR_64(rax, 0)
 GPR_64(rdx, 1)
 GPR_64(rcx, 2)
@@ -50,6 +34,10 @@ GPR_64(ds, 53)
 GPR_64(es, 50)
 GPR_64(orig_rax, -1)
 
+#define GPR_32(name, super)                                                    \
+  REG(name, -1, 4, GPR_OFFSET(super), RegisterType::SubGPR,                    \
+      RegisterFormat::UInt)
+
 GPR_32(eax, rax)
 GPR_32(edx, rdx)
 GPR_32(ecx, rcx)
@@ -66,6 +54,10 @@ GPR_32(r12d, r12)
 GPR_32(r13d, r13)
 GPR_32(r14d, r14)
 GPR_32(r15d, r15)
+
+#define GPR_16(name, super)                                                    \
+  REG(name, -1, 2, GPR_OFFSET(super), RegisterType::SubGPR,                    \
+      RegisterFormat::UInt)
 
 GPR_16(ax, rax)
 GPR_16(dx, rdx)
@@ -84,10 +76,18 @@ GPR_16(r13w, r13)
 GPR_16(r14w, r14)
 GPR_16(r15w, r15)
 
+#define GPR_8H(name, super)                                                    \
+  REG(name, -1, 1, GPR_OFFSET(super) + 1, RegisterType::SubGPR,                \
+      RegisterFormat::UInt)
+
 GPR_8H(ah, rax)
 GPR_8H(dh, rdx)
 GPR_8H(ch, rcx)
 GPR_8H(bh, rbx)
+
+#define GPR_8L(name, super)                                                    \
+  REG(name, -1, 1, GPR_OFFSET(super), RegisterType::SubGPR,                    \
+      RegisterFormat::UInt)
 
 GPR_8L(al, rax)
 GPR_8L(dl, rdx)
@@ -113,18 +113,6 @@ GPR_8L(r15b, r15)
   REG(name, dwarfId, FPR_SIZE(userName), FPR_OFFSET(userName),                 \
       RegisterType::FPR, RegisterFormat::UInt)
 
-#define FPR_ST(num)                                                            \
-  REG(st##num, (33 + num), 16, (FPR_OFFSET(st_space) + num * 16),              \
-      RegisterType::FPR, RegisterFormat::LongDouble)
-
-#define FPR_MM(num)                                                            \
-  REG(mm##num, (41 + num), 8, (FPR_OFFSET(st_space) + num * 16),               \
-      RegisterType::FPR, RegisterFormat::Vector)
-
-#define FPR_XMM(num)                                                           \
-  REG(xmm##num, (17 + num), 16, (FPR_OFFSET(xmm_space) + num * 16),            \
-      RegisterType::FPR, RegisterFormat::Vector)
-
 FPR(fcw, 65, cwd)
 FPR(fsw, 66, swd)
 FPR(ftw, -1, ftw)
@@ -133,6 +121,10 @@ FPR(frip, -1, rip)
 FPR(frdp, -1, rdp)
 FPR(mxcsr, 64, mxcsr)
 FPR(mxcsrmask, -1, mxcr_mask)
+
+#define FPR_ST(num)                                                            \
+  REG(st##num, (33 + num), 16, (FPR_OFFSET(st_space) + num * 16),              \
+      RegisterType::FPR, RegisterFormat::LongDouble)
 
 FPR_ST(0)
 FPR_ST(1)
@@ -143,6 +135,10 @@ FPR_ST(5)
 FPR_ST(6)
 FPR_ST(7)
 
+#define FPR_MM(num)                                                            \
+  REG(mm##num, (41 + num), 8, (FPR_OFFSET(st_space) + num * 16),               \
+      RegisterType::FPR, RegisterFormat::Vector)
+
 FPR_MM(0)
 FPR_MM(1)
 FPR_MM(2)
@@ -151,6 +147,10 @@ FPR_MM(4)
 FPR_MM(5)
 FPR_MM(6)
 FPR_MM(7)
+
+#define FPR_XMM(num)                                                           \
+  REG(xmm##num, (17 + num), 16, (FPR_OFFSET(xmm_space) + num * 16),            \
+      RegisterType::FPR, RegisterFormat::Vector)
 
 FPR_XMM(0)
 FPR_XMM(1)
