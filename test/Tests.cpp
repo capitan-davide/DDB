@@ -373,3 +373,30 @@ TEST_CASE("Can remove breakpoint sites", "[Breakpoint]") {
   proc->breakpointSites().removeByAddr(VirtAddr(43));
   REQUIRE(proc->breakpointSites().empty());
 }
+
+TEST_CASE("Reading and writing memory works", "[Memory]") {
+  DDB::Pipe pipe(/*closeOnExec=*/true);
+  auto proc = DDB::Process::launch("targets/memory", /*debug=*/true,
+                                   /*outFd=*/pipe.getWrite());
+  pipe.closeWrite();
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  auto aAddr = DDB::fromBytes<U64>(pipe.read().data());
+  std::vector<std::byte> aVec = proc->readMemory(VirtAddr(aAddr), 8);
+  auto a = DDB::fromBytes<U64>(aVec.data());
+  REQUIRE(a == 0xcafebabe);
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  auto bAddr = DDB::fromBytes<U64>(pipe.read().data());
+  proc->writeMemory(VirtAddr(bAddr), {DDB::asBytes("Hello, DDB!"), 12});
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  std::vector<std::byte> b = pipe.read();
+  REQUIRE(DDB::toStringView(b) == "Hello, DDB!");
+}

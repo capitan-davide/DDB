@@ -7,6 +7,9 @@ target_compile_options(end-immediately PRIVATE -g -O0 -pie)
 add_executable(hello-ddb HelloDDB.cpp)
 target_compile_options(hello-ddb PRIVATE -g -O0 -pie)
 
+add_executable(memory Memory.cpp)
+target_compile_options(memory PRIVATE -g -O0 -pie)
+
 add_executable(reg-read RegRead.S)
 target_compile_options(reg-read PRIVATE -pie)
 
