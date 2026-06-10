@@ -1,5 +1,6 @@
 add_library(LibDDB
   BreakpointSite.cpp
+  Disassembler.cpp
   Error.cpp
   Pipe.cpp
   Process.cpp
@@ -7,6 +8,10 @@ add_library(LibDDB
 )
 
 add_library(DDB::LibDDB ALIAS LibDDB)
+
+target_link_libraries(LibDDB
+  PRIVATE Zydis::Zydis
+)
 
 set_target_properties(LibDDB
   PROPERTIES OUTPUT_NAME DDB

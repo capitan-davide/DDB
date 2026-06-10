@@ -11,6 +11,7 @@ pkg_check_modules(
 )
 
 find_package(fmt CONFIG REQUIRED)
+find_package(zydis CONFIG REQUIRED)
 
 add_subdirectory(lib)
 add_subdirectory(tools)

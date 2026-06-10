@@ -328,6 +328,14 @@ std::vector<std::byte> DDB::Process::readMemory(VirtAddr addr,
   return ret;
 }
 
+std::vector<std::byte>
+DDB::Process::readMemoryWithoutTraps(VirtAddr addr, std::size_t nBytes) const {
+  // TODO: This function is similar to readMemory() but, it needs to disable
+  // breakpoints so that DDB::Disassembler can print the *real* instructions and
+  // not our 'int3' patches that we use to break the CPU.
+  return {};
+}
+
 void DDB::Process::writeMemory(VirtAddr addr,
                                Span<const std::byte> data) const {
   // We cannot use 'process_vm_writev' here because this function doesn't

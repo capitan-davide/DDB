@@ -90,6 +90,8 @@ public:
   StopReason stepInstruction();
 
   std::vector<std::byte> readMemory(VirtAddr addr, std::size_t nBytes) const;
+  std::vector<std::byte> readMemoryWithoutTraps(VirtAddr addr,
+                                                std::size_t nBytes) const;
   void writeMemory(VirtAddr addr, Span<const std::byte> data) const;
 
   template <class T> T readMemoryAs(VirtAddr addr) const {

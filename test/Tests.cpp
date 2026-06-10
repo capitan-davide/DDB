@@ -64,7 +64,7 @@ U64 getSectionLoadBias(std::filesystem::path path, Elf64_Addr fileAddr) {
   }
 
   ::pclose(pipe);
-  DDB::Error::send("Could not find section load bias");
+  Error::send("Could not find section load bias");
 }
 
 U64 getEntryPointOffset(std::filesystem::path path) {
@@ -150,7 +150,7 @@ TEST_CASE("Process::writeUserArea not traced", "[Process]") {
 }
 
 TEST_CASE("Write registers works", "[Register]") {
-  DDB::Pipe pipe(/*closeOnExec=*/false);
+  Pipe pipe(/*closeOnExec=*/false);
 
   auto proc = Process::launch("targets/reg-write", /*debug=*/true,
                               /*outFd=*/pipe.getWrite());
@@ -335,10 +335,10 @@ TEST_CASE("Can iterate breakpoint sites", "[Breakpont]") {
 }
 
 TEST_CASE("Breakpoint on address works", "[Breakpoint]") {
-  DDB::Pipe pipe(/*closeOnExec=*/false);
+  Pipe pipe(/*closeOnExec=*/false);
 
-  auto proc = DDB::Process::launch("targets/hello-ddb", /*debug=*/true,
-                                   /*outFd=*/pipe.getWrite());
+  auto proc = Process::launch("targets/hello-ddb", /*debug=*/true,
+                              /*outFd=*/pipe.getWrite());
   pipe.closeWrite();
 
   U64 offs = getEntryPointOffset("targets/hello-ddb");
@@ -363,7 +363,7 @@ TEST_CASE("Breakpoint on address works", "[Breakpoint]") {
 }
 
 TEST_CASE("Can remove breakpoint sites", "[Breakpoint]") {
-  auto proc = DDB::Process::launch("targets/run-endlessly");
+  auto proc = Process::launch("targets/run-endlessly");
 
   BreakpointSite &bs = proc->createBreakpointSite(VirtAddr(42));
   proc->createBreakpointSite(VirtAddr(43));
@@ -375,28 +375,28 @@ TEST_CASE("Can remove breakpoint sites", "[Breakpoint]") {
 }
 
 TEST_CASE("Reading and writing memory works", "[Memory]") {
-  DDB::Pipe pipe(/*closeOnExec=*/true);
-  auto proc = DDB::Process::launch("targets/memory", /*debug=*/true,
-                                   /*outFd=*/pipe.getWrite());
+  Pipe pipe(/*closeOnExec=*/true);
+  auto proc = Process::launch("targets/memory", /*debug=*/true,
+                              /*outFd=*/pipe.getWrite());
   pipe.closeWrite();
 
   proc->resume();
   proc->waitOnSignal();
 
-  auto aAddr = DDB::fromBytes<U64>(pipe.read().data());
+  auto aAddr = fromBytes<U64>(pipe.read().data());
   std::vector<std::byte> aVec = proc->readMemory(VirtAddr(aAddr), 8);
-  auto a = DDB::fromBytes<U64>(aVec.data());
+  auto a = fromBytes<U64>(aVec.data());
   REQUIRE(a == 0xcafebabe);
 
   proc->resume();
   proc->waitOnSignal();
 
-  auto bAddr = DDB::fromBytes<U64>(pipe.read().data());
-  proc->writeMemory(VirtAddr(bAddr), {DDB::asBytes("Hello, DDB!"), 12});
+  auto bAddr = fromBytes<U64>(pipe.read().data());
+  proc->writeMemory(VirtAddr(bAddr), {asBytes("Hello, DDB!"), 12});
 
   proc->resume();
   proc->waitOnSignal();
 
   std::vector<std::byte> b = pipe.read();
-  REQUIRE(DDB::toStringView(b) == "Hello, DDB!");
+  REQUIRE(toStringView(b) == "Hello, DDB!");
 }

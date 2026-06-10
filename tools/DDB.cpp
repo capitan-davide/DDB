@@ -1,4 +1,5 @@
 #include "DDB/BreakpointSite.h"
+#include "DDB/Disassembler.h"
 #include "DDB/Error.h"
 #include "DDB/Parse.h"
 #include "DDB/Process.h"
@@ -12,8 +13,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
-#include <iterator>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -27,6 +28,7 @@
 #include <unistd.h>
 
 #include <editline/readline.h>
+#include <fmt/base.h>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
@@ -44,19 +46,22 @@ void handleRegisterWrite(DDB::Process &proc,
                          const std::vector<std::string> &args);
 void handleBreakpointCommand(DDB::Process &proc,
                              const std::vector<std::string> &args);
-void handleStepCommand(DDB::Process &proc,
-                       const std::vector<std::string> &args);
 void handleMemoryCommand(DDB::Process &proc,
                          const std::vector<std::string> &args);
 void handleMemoryReadCommand(DDB::Process &proc,
                              const std::vector<std::string> &args);
 void handleMemoryWriteCommand(DDB::Process &proc,
                               const std::vector<std::string> &args);
+void handleDisassembleCommand(DDB::Process &proc,
+                              const std::vector<std::string> &args);
+void handleStop(DDB::Process &proc, DDB::StopReason reason);
 void handleQuitCommand(DDB::Process &proc,
                        const std::vector<std::string> &args);
 DDB::Registers::Value parseRegisterValue(DDB::RegisterInfo info,
                                          std::string_view text);
 void printStopReason(const DDB::Process &proc, DDB::StopReason reason);
+void printDisassembly(const DDB::Process &proc, DDB::VirtAddr addr,
+                      std::size_t nInstr);
 void printHelp(const std::vector<std::string> &args);
 std::vector<std::string> split(std::string_view str, char delim);
 bool isPrefix(std::string_view str, std::string_view of);
@@ -128,15 +133,18 @@ void handleCommand(std::unique_ptr<DDB::Process> &proc, std::string_view line) {
   if (isPrefix(cmd, "continue")) {
     proc->resume();
     DDB::StopReason reason = proc->waitOnSignal();
-    printStopReason(*proc, reason);
+    handleStop(*proc, reason);
   } else if (isPrefix(cmd, "register")) {
     handleRegisterCommand(*proc, args);
   } else if (isPrefix(cmd, "breakpoint")) {
     handleBreakpointCommand(*proc, args);
   } else if (isPrefix(cmd, "step")) {
-    handleStepCommand(*proc, args);
+    DDB::StopReason reason = proc->stepInstruction();
+    handleStop(*proc, reason);
   } else if (isPrefix(cmd, "memory")) {
     handleMemoryCommand(*proc, args);
+  } else if (isPrefix(cmd, "disassemble")) {
+    handleDisassembleCommand(*proc, args);
   } else if (isPrefix(cmd, "help")) {
     printHelp(args);
   } else if (isPrefix(cmd, "quit")) {
@@ -263,12 +271,6 @@ void handleBreakpointCommand(DDB::Process &proc,
   }
 }
 
-void handleStepCommand(DDB::Process &proc,
-                       const std::vector<std::string> &args) {
-  DDB::StopReason reason = proc.stepInstruction();
-  printStopReason(proc, reason);
-}
-
 void handleMemoryCommand(DDB::Process &proc,
                          const std::vector<std::string> &args) {
   if (args.size() < 3) {
@@ -329,6 +331,37 @@ void handleMemoryWriteCommand(DDB::Process &proc,
 
   std::vector<std::byte> data = DDB::parseVector(args[3]);
   proc.writeMemory(DDB::VirtAddr(*addr), data);
+}
+
+void handleDisassembleCommand(DDB::Process &proc,
+                              const std::vector<std::string> &args) {
+  DDB::VirtAddr addr = proc.getPC();
+  std::size_t nInstr = 5;
+  for (auto it = args.begin() + 1; it != args.end(); ++it) {
+    if (*it == "-a" && it + 1 != args.end()) {
+      ++it;
+      auto optAddr = DDB::toIntegral<U64>(*it++, 16);
+      if (!optAddr)
+        DDB::Error::send("Invalid address format");
+      addr = DDB::VirtAddr(*optAddr);
+    } else if (*it == "-c" && it + 1 != args.end()) {
+      ++it;
+      auto optNInstr = DDB::toIntegral<std::size_t>(*it++);
+      if (!optNInstr)
+        DDB::Error::send("Invalid instruction count");
+      nInstr = *optNInstr;
+    } else {
+      printHelp({"help", "disassemble"});
+    }
+  }
+  printDisassembly(proc, addr, nInstr);
+}
+
+void handleStop(DDB::Process &proc, DDB::StopReason reason) {
+  printStopReason(proc, reason);
+  if (reason.state == DDB::ProcessState::Stopped) {
+    printDisassembly(proc, proc.getPC(), 5);
+  }
 }
 
 void handleQuitCommand(DDB::Process &proc,
@@ -401,11 +434,22 @@ void printStopReason(const DDB::Process &proc, DDB::StopReason reason) {
   fmt::println("Process {} {}", proc.pid(), msg);
 }
 
+void printDisassembly(const DDB::Process &proc, DDB::VirtAddr addr,
+                      std::size_t nInstr) {
+  DDB::Disassembler dis(proc);
+
+  std::vector instructions = dis.disassemble(nInstr, addr);
+  for (const auto &instr : instructions) {
+    fmt::println("{:#018x}: {}", instr.addr.asInt(), instr.text);
+  }
+}
+
 void printHelp(const std::vector<std::string> &args) {
   if (args.size() == 1) {
     std::cerr << R"(Debugger commands:
   breakpoint  - Commands for operating on breakpoints
   continue    - Resume the process
+  disassemble - Disassemble machine code to assembly
   memory      - Commands for operating on memory
   quit        - Quit the DDB debugger
   register    - Commands for operating on registers
@@ -431,6 +475,11 @@ void printHelp(const std::vector<std::string> &args) {
   read <addr>
   read <addr> <number-of-bytes>
   write <addr> <bytes>
+)";
+  } else if (isPrefix(args[1], "disassemble")) {
+    std::cerr << R"(Debugger commands:
+  disassemble
+  disassemble -c <n> -a <addr>
 )";
   } else if (isPrefix(args[1], "quit")) {
     std::cerr << R"(Debubber commands:
