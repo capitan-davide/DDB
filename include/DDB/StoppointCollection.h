@@ -23,6 +23,7 @@ public:
   const Stoppoint &getById(typename Stoppoint::IdType id) const;
   Stoppoint &getByAddr(VirtAddr addr);
   const Stoppoint &getByAddr(VirtAddr addr) const;
+  std::vector<Stoppoint *> getInRegion(VirtAddr low, VirtAddr high) const;
 
   void removeById(typename Stoppoint::IdType id);
   void removeByAddr(VirtAddr addr);
@@ -96,6 +97,18 @@ template <class Stoppoint>
 const Stoppoint &
 StoppointCollection<Stoppoint>::getByAddr(VirtAddr addr) const {
   return const_cast<StoppointCollection *>(this)->getByAddr(addr);
+}
+
+template <class Stoppoint>
+std::vector<Stoppoint *>
+StoppointCollection<Stoppoint>::getInRegion(VirtAddr low, VirtAddr high) const {
+  std::vector<Stoppoint *> ret;
+  for (auto &sp : m_stoppoints) {
+    if (sp->inRange(low, high)) {
+      ret.push_back(&*sp);
+    }
+  }
+  return ret;
 }
 
 template <class Stoppoint>

@@ -21,7 +21,8 @@ DDB::Disassembler::disassemble(std::size_t nInstr,
 
   // The largest x86_64 instruction is 15 byte, reading nInstrInstr * 15 bytes
   // guarantees to have enough memory to disassemble 'nInstr' instructions.
-  std::vector<std::byte> code = m_proc->readMemory(*addr, nInstr * 15);
+  std::vector<std::byte> code =
+      m_proc->readMemoryWithoutTraps(*addr, nInstr * 15);
 
   ZyanUSize offs = 0;
   ZydisDisassembledInstruction instr;

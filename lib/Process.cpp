@@ -330,10 +330,16 @@ std::vector<std::byte> DDB::Process::readMemory(VirtAddr addr,
 
 std::vector<std::byte>
 DDB::Process::readMemoryWithoutTraps(VirtAddr addr, std::size_t nBytes) const {
-  // TODO: This function is similar to readMemory() but, it needs to disable
-  // breakpoints so that DDB::Disassembler can print the *real* instructions and
-  // not our 'int3' patches that we use to break the CPU.
-  return {};
+  std::vector<std::byte> memory = readMemory(addr, nBytes);
+  std::vector<BreakpointSite *> breakpointSites =
+      m_breakpointSites.getInRegion(addr, addr + nBytes);
+  for (BreakpointSite *bs : breakpointSites) {
+    if (!bs->isEnabled())
+      continue;
+    VirtAddr offs = bs->addr() - addr.asInt();
+    memory[offs.asInt()] = bs->m_savedData;
+  }
+  return memory;
 }
 
 void DDB::Process::writeMemory(VirtAddr addr,
