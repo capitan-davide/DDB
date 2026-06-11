@@ -28,7 +28,7 @@ using namespace DDB;
 namespace {
 bool processExists(pid_t pid) {
   int ret = kill(pid, 0);
-  return ret != -1 && errno != ESRCH;
+  return ret != -1 || errno != ESRCH;
 }
 
 char getProcessStatus(pid_t pid) {
