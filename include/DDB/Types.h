@@ -79,6 +79,8 @@ private:
   T *m_data = nullptr;
   std::size_t m_size = 0;
 };
+
+enum class StoppointMode { Write, ReadWrite, Execute };
 } // namespace DDB
 
 #endif // DDB_TYPES_H

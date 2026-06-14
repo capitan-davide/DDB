@@ -22,6 +22,8 @@ public:
   void disable();
 
   bool isEnabled() const { return m_isEnabled; }
+  bool isHardware() const { return m_isHardware; }
+  bool isInternal() const { return m_isInternal; }
 
   IdType id() const { return m_id; }
   VirtAddr addr() const { return m_addr; }
@@ -32,7 +34,8 @@ public:
   }
 
 private:
-  BreakpointSite(Process &proc, VirtAddr addr);
+  BreakpointSite(Process &proc, VirtAddr addr, bool isHardware = false,
+                 bool isInternal = false);
   friend Process;
 
   IdType m_id;
@@ -40,6 +43,9 @@ private:
   VirtAddr m_addr;
   bool m_isEnabled;
   std::byte m_savedData;
+  bool m_isHardware;
+  bool m_isInternal;
+  int m_hardwareRegisterIdx;
 };
 } // namespace DDB
 

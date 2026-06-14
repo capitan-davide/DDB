@@ -10,6 +10,9 @@ target_compile_options(hello-ddb PRIVATE -g -O0 -pie)
 add_executable(memory Memory.cpp)
 target_compile_options(memory PRIVATE -g -O0 -pie)
 
+add_executable(anti-debugger AntiDebugger.cpp)
+target_compile_options(anti-debugger PRIVATE -g -O0 -pie)
+
 add_executable(reg-read RegRead.S)
 target_compile_options(reg-read PRIVATE -pie)
 

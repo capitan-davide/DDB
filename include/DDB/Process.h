@@ -82,7 +82,11 @@ public:
   void writeGPRs(const user_regs_struct &gprs);
 
   /// TODO: Write documentation.
-  BreakpointSite &createBreakpointSite(VirtAddr addr);
+  BreakpointSite &createBreakpointSite(VirtAddr addr, bool hardware = false,
+                                       bool internal = false);
+
+  int setHardwareBreakpoint(BreakpointSite::IdType id, VirtAddr addr);
+  void clearHardwareStoppoint(int idx);
 
   /// Step over a single machine instruction.
   /// @return A StopReason struct describing why the process stopped after
@@ -124,6 +128,8 @@ private:
         m_registers(new Registers(*this)) {}
 
   void readAllRegisters();
+
+  int setHardwareStoppoint(VirtAddr addr, StoppointMode mode, std::size_t size);
 
   /// The process ID of this process.
   pid_t m_pid;

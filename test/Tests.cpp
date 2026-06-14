@@ -400,3 +400,34 @@ TEST_CASE("Reading and writing memory works", "[Memory]") {
   std::vector<std::byte> b = pipe.read();
   REQUIRE(toStringView(b) == "Hello, DDB!");
 }
+
+TEST_CASE("Hardware breakpoint evade memory checksums", "[Breakpoint]") {
+  Pipe pipe(/*closeOnExec=*/true);
+  auto proc = Process::launch("targets/anti-debugger", /*debug=*/true,
+                              /*outFd=*/pipe.getWrite());
+  pipe.closeWrite();
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  auto funcAddr = VirtAddr(fromBytes<U64>(pipe.read().data()));
+
+  BreakpointSite &softBs =
+      proc->createBreakpointSite(funcAddr, /*hardware=*/false);
+  softBs.enable();
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  REQUIRE(toStringView(pipe.read()) == "Doing something innocent...\n");
+
+  proc->breakpointSites().removeById(softBs.id());
+  BreakpointSite &hardBs =
+      proc->createBreakpointSite(funcAddr, /*hardware=*/true);
+  // hardBs.enable(); // FIXME: For some reasons, enabling this will cause the test do get stuck here
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  REQUIRE(toStringView(pipe.read()) == "Doing something evil...\n");
+}

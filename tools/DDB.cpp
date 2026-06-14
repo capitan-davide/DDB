@@ -238,6 +238,8 @@ void handleBreakpointCommand(DDB::Process &proc,
     } else {
       fmt::println("Current breakpoints:");
       proc.breakpointSites().forEach([](auto &bs) {
+        if (bs.isInternal())
+          return;
         fmt::println("{}: addr = {:#x}, {}", bs.id(), bs.addr().asInt(),
                      bs.isEnabled() ? "enabled" : "disabled");
       });
@@ -257,7 +259,14 @@ void handleBreakpointCommand(DDB::Process &proc,
                            "hexadecimal, prefixed with '0x'");
       return;
     }
-    proc.createBreakpointSite(DDB::VirtAddr(*addr)).enable();
+    bool hardware = false;
+    if (args.size() == 4) {
+      if (args[3] == "-h")
+        hardware = true;
+      else
+        DDB::Error::send("Invalid breakpoint command argument");
+    }
+    proc.createBreakpointSite(DDB::VirtAddr(*addr), hardware).enable();
     return;
   }
 
@@ -469,6 +478,7 @@ void printHelp(const std::vector<std::string> &args) {
   disable <id>
   enable <id>
   set <addr>
+  set <addr> -h
 )";
   } else if (isPrefix(args[1], "memory")) {
     std::cerr << R"(Debugger commands:

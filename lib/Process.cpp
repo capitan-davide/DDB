@@ -32,6 +32,43 @@ namespace {
   pipe.write(reinterpret_cast<std::byte *>(msg.data()), msg.size());
   std::exit(EXIT_FAILURE);
 }
+
+int findFreeStoppointRegister(U64 ctlReg) {
+  for (unsigned i = 0; i < 4; ++i) {
+    if ((ctlReg & (0b11 << (i * 2))) == 0) {
+      return i;
+    }
+  }
+  DDB::Error::send("No remaining hardware debug registers");
+}
+
+U64 encodeHardwareStoppointMode(DDB::StoppointMode mode) {
+  switch (mode) {
+  case DDB::StoppointMode::Write:
+    return 0b01;
+  case DDB::StoppointMode::ReadWrite:
+    return 0b11;
+  case DDB::StoppointMode::Execute:
+    return 0b00;
+  default:
+    DDB_UNREACHABLE("Invalid stoppoint mode");
+  }
+}
+
+U64 encodeHardwareStoppointSize(std::size_t size) {
+  switch (size) {
+  case 1:
+    return 0b00;
+  case 2:
+    return 0b01;
+  case 4:
+    return 0b11;
+  case 8:
+    return 0b10;
+  default:
+    DDB_UNREACHABLE("Invalid stoppoint size");
+  }
+}
 } // namespace
 
 DDB::StopReason::StopReason(int waitStatus) {
@@ -230,28 +267,6 @@ DDB::StopReason DDB::Process::waitOnSignal() {
   return reason;
 }
 
-void DDB::Process::readAllRegisters() {
-  if (ptrace(PTRACE_GETREGS, m_pid, nullptr, &getRegisters().m_data.regs) ==
-      -1) {
-    Error::sendErrno("ptrace(PTRACE_GETREGS)");
-  }
-  if (ptrace(PTRACE_GETFPREGS, m_pid, nullptr, &getRegisters().m_data.i387) ==
-      -1) {
-    Error::sendErrno("ptrace(PTRACE_GETREGS)");
-  }
-  for (unsigned i = 0; i < 8; ++i) {
-    auto id = static_cast<int>(RegisterId::dr0) + i;
-    RegisterInfo info = registerInfoById(static_cast<RegisterId>(id));
-
-    errno = 0;
-    U64 data = ptrace(PTRACE_PEEKUSER, m_pid, info.offset, nullptr);
-    if (data == -1 && errno != 0)
-      Error::sendErrno("ptrace(PTRACE_PEEKUSER");
-
-    getRegisters().m_data.u_debugreg[i] = data;
-  }
-}
-
 void DDB::Process::writeUserArea(std::size_t offset, U64 data) {
   // FIXME: When executing 'reg write ah 0x42' ptrace returns EIO error. Still,
   // the 'ah' portion of 'rax' register seems to be written correctly.
@@ -275,13 +290,34 @@ void DDB::Process::writeGPRs(const user_regs_struct &gprs) {
   }
 }
 
-DDB::BreakpointSite &DDB::Process::createBreakpointSite(VirtAddr addr) {
+DDB::BreakpointSite &DDB::Process::createBreakpointSite(VirtAddr addr,
+                                                        bool hardware,
+                                                        bool internal) {
   if (m_breakpointSites.containsAddr(addr)) {
     Error::send("Breakpoint site already created at address " +
                 std::to_string(addr.asInt()));
   }
-  return m_breakpointSites.push(
-      std::unique_ptr<BreakpointSite>(new BreakpointSite(*this, addr)));
+  return m_breakpointSites.push(std::unique_ptr<BreakpointSite>(
+      new BreakpointSite(*this, addr, hardware, internal)));
+}
+
+int DDB::Process::setHardwareBreakpoint(BreakpointSite::IdType id,
+                                        VirtAddr addr) {
+  return setHardwareStoppoint(addr, StoppointMode::Execute, 1);
+}
+
+void DDB::Process::clearHardwareStoppoint(int idx) {
+  Registers &regs = getRegisters();
+
+  auto id = static_cast<int>(RegisterId::dr0) + idx;
+  regs.writeById(static_cast<RegisterId>(id), 0);
+
+  auto ctlReg = regs.readByIdAs<U64>(RegisterId::dr7);
+
+  U64 clearMaks = (0b11 << (idx * 2)) | (0b1111 << (idx * 4 + 16));
+  U64 masked = ctlReg & ~clearMaks;
+
+  regs.writeById(RegisterId::dr7, masked);
 }
 
 DDB::StopReason DDB::Process::stepInstruction() {
@@ -334,7 +370,7 @@ DDB::Process::readMemoryWithoutTraps(VirtAddr addr, std::size_t nBytes) const {
   std::vector<BreakpointSite *> breakpointSites =
       m_breakpointSites.getInRegion(addr, addr + nBytes);
   for (BreakpointSite *bs : breakpointSites) {
-    if (!bs->isEnabled())
+    if (!bs->isEnabled() || bs->isHardware())
       continue;
     VirtAddr offs = bs->addr() - addr.asInt();
     memory[offs.asInt()] = bs->m_savedData;
@@ -365,4 +401,54 @@ void DDB::Process::writeMemory(VirtAddr addr,
     }
     nWritten += 8;
   }
+}
+
+void DDB::Process::readAllRegisters() {
+  if (ptrace(PTRACE_GETREGS, m_pid, nullptr, &getRegisters().m_data.regs) ==
+      -1) {
+    Error::sendErrno("ptrace(PTRACE_GETREGS)");
+  }
+  if (ptrace(PTRACE_GETFPREGS, m_pid, nullptr, &getRegisters().m_data.i387) ==
+      -1) {
+    Error::sendErrno("ptrace(PTRACE_GETREGS)");
+  }
+  for (unsigned i = 0; i < 8; ++i) {
+    auto id = static_cast<int>(RegisterId::dr0) + i;
+    RegisterInfo info = registerInfoById(static_cast<RegisterId>(id));
+
+    errno = 0;
+    U64 data = ptrace(PTRACE_PEEKUSER, m_pid, info.offset, nullptr);
+    if (data == -1 && errno != 0)
+      Error::sendErrno("ptrace(PTRACE_PEEKUSER");
+
+    getRegisters().m_data.u_debugreg[i] = data;
+  }
+}
+
+int DDB::Process::setHardwareStoppoint(VirtAddr addr, StoppointMode mode,
+                                       std::size_t size) {
+  Registers &regs = getRegisters();
+
+  auto ctlReg = regs.readByIdAs<U64>(RegisterId::dr7);
+  int freeIdx = findFreeStoppointRegister(ctlReg);
+
+  // The debug registers' IDs are sequential; the ID of DR1 is the one directly
+  // following DR0, and so on.
+  auto id = static_cast<int>(RegisterId::dr0) + freeIdx;
+  regs.writeById(static_cast<RegisterId>(id), addr.asInt());
+
+  U64 modeFlag = encodeHardwareStoppointMode(mode);
+  U64 sizeFlag = encodeHardwareStoppointSize(size);
+
+  U64 enableBit = (1 << (freeIdx * 2));
+  U64 modeBits = (modeFlag << (freeIdx * 4 + 16));
+  U64 sizeBits = (sizeFlag << (freeIdx * 4 + 18));
+
+  U64 clearMask = (0b11 << (freeIdx * 2)) | (0b1111 << (freeIdx * 4 + 16));
+  U64 masked = ctlReg & ~clearMask;
+
+  masked |= enableBit | modeBits | sizeBits;
+  regs.writeById(RegisterId::dr7, masked);
+
+  return freeIdx;
 }
