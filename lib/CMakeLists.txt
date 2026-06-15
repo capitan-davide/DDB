@@ -5,6 +5,7 @@ add_library(LibDDB
   Pipe.cpp
   Process.cpp
   Registers.cpp
+  Watchpoint.cpp
 )
 
 add_library(DDB::LibDDB ALIAS LibDDB)

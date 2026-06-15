@@ -10,8 +10,8 @@
 
 namespace {
 DDB::BreakpointSite::IdType getNextId() {
-  static DDB::BreakpointSite::IdType id = 0;
-  return ++id;
+  static DDB::BreakpointSite::IdType s_id = 0;
+  return ++s_id;
 }
 } // namespace
 

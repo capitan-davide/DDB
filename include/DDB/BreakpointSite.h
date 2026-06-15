@@ -45,7 +45,7 @@ private:
   std::byte m_savedData;
   bool m_isHardware;
   bool m_isInternal;
-  int m_hardwareRegisterIdx;
+  int m_hardwareRegisterIdx = -1;
 };
 } // namespace DDB
 
