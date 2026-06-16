@@ -5,6 +5,7 @@
 #include "DDB/Process.h"
 #include "DDB/RegisterInfo.h"
 #include "DDB/Types.h"
+#include "DDB/Watchpoint.h"
 
 #include <algorithm>
 #include <cctype>
@@ -46,6 +47,12 @@ void handleRegisterWrite(DDB::Process &proc,
                          const std::vector<std::string> &args);
 void handleBreakpointCommand(DDB::Process &proc,
                              const std::vector<std::string> &args);
+void handleWatchpointCommand(DDB::Process &proc,
+                             const std::vector<std::string> &args);
+void handleWatchpointList(DDB::Process &proc,
+                          const std::vector<std::string> &args);
+void handleWatchpointSet(DDB::Process &proc,
+                         const std::vector<std::string> &args);
 void handleMemoryCommand(DDB::Process &proc,
                          const std::vector<std::string> &args);
 void handleMemoryReadCommand(DDB::Process &proc,
@@ -145,6 +152,8 @@ void handleCommand(std::unique_ptr<DDB::Process> &proc, std::string_view line) {
     handleMemoryCommand(*proc, args);
   } else if (isPrefix(cmd, "disassemble")) {
     handleDisassembleCommand(*proc, args);
+  } else if (isPrefix(cmd, "watchpoint")) {
+    handleWatchpointCommand(*proc, args);
   } else if (isPrefix(cmd, "help")) {
     printHelp(args);
   } else if (isPrefix(cmd, "quit")) {
@@ -278,6 +287,100 @@ void handleBreakpointCommand(DDB::Process &proc,
   } else if (isPrefix(cmd, "delete")) {
     proc.breakpointSites().removeById(*id);
   }
+}
+
+void handleWatchpointCommand(DDB::Process &proc,
+                             const std::vector<std::string> &args) {
+  if (args.size() < 2) {
+    printHelp({"help", "watchpoint"});
+    return;
+  }
+
+  std::string cmd = args[1];
+
+  if (isPrefix(cmd, "list")) {
+    handleWatchpointList(proc, args);
+    return;
+  }
+
+  if (isPrefix(cmd, "set")) {
+    handleWatchpointSet(proc, args);
+    return;
+  }
+
+  if (args.size() < 3) {
+    printHelp({"help", "watchpoint"});
+    return;
+  }
+
+  auto id = DDB::toIntegral<DDB::Watchpoint::IdType>(args[2]);
+  if (!id) {
+    std::cerr << "Command expects watchpoint id\n"; // FIXME: Consistent error
+                                                    // handling
+    return;
+  }
+
+  if (isPrefix(cmd, "enable")) {
+    proc.watchpoints().getById(*id).enable();
+  } else if (isPrefix(cmd, "disable")) {
+    proc.watchpoints().getById(*id).disable();
+  } else if (isPrefix(cmd, "delete")) {
+    proc.watchpoints().removeById(*id);
+  }
+}
+
+void handleWatchpointList(DDB::Process &proc,
+                          const std::vector<std::string> &args) {
+  auto watchpointModeToString = [](DDB::StoppointMode mode) {
+    switch (mode) {
+    case DDB::StoppointMode::Execute:
+      return "x";
+    case DDB::StoppointMode::Write:
+      return "w";
+    case DDB::StoppointMode::ReadWrite:
+      return "rw";
+    default:
+      DDB_UNREACHABLE("Invalid stoppoint mode");
+    }
+  };
+
+  if (proc.watchpoints().empty()) {
+    fmt::println("No watchpoints set");
+  } else {
+    proc.watchpoints().forEach([&](DDB::Watchpoint &wp) {
+      fmt::println("{}: addr = {:#x}, mode = {}, size = {}, {}", wp.id(),
+                   wp.addr().asInt(), watchpointModeToString(wp.mode()),
+                   wp.size(), wp.isEnabled() ? "enabled" : "disabled");
+    });
+  }
+}
+
+void handleWatchpointSet(DDB::Process &proc,
+                         const std::vector<std::string> &args) {
+  if (args.size() != 5) {
+    printHelp({"help", "watchpoint"});
+    return;
+  }
+
+  std::optional addr = DDB::toIntegral<U64>(args[2], 16);
+  std::string modeStr = args[3];
+  std::optional size = DDB::toIntegral<std::size_t>(args[4]);
+
+  if (!addr || !size ||
+      !(modeStr == "w" || modeStr == "rw" || modeStr == "x")) {
+    printHelp({"help", "watchpoint"});
+    return;
+  }
+
+  DDB::StoppointMode mode;
+  if (modeStr == "w")
+    mode = DDB::StoppointMode::Write;
+  else if (modeStr == "rw")
+    mode = DDB::StoppointMode::ReadWrite;
+  else if (modeStr == "x")
+    mode = DDB::StoppointMode::Execute;
+
+  proc.createWatchpoint(DDB::VirtAddr(*addr), mode, *size).enable();
 }
 
 void handleMemoryCommand(DDB::Process &proc,
@@ -463,6 +566,7 @@ void printHelp(const std::vector<std::string> &args) {
   quit        - Quit the DDB debugger
   register    - Commands for operating on registers
   step        - Step over a single instruction
+  watchpoint  - Commands for operating on watchpoints
 )";
   } else if (isPrefix(args[1], "register")) {
     std::cerr << R"(Debugger commands:
@@ -485,6 +589,14 @@ void printHelp(const std::vector<std::string> &args) {
   read <addr>
   read <addr> <number-of-bytes>
   write <addr> <bytes>
+)";
+  } else if (isPrefix(args[1], "watchpoint")) {
+    std::cerr << R"(Debugger commands:
+  list
+  delete <id>
+  disable <id>
+  enable <id>
+  set <addr> <w|rw|x> <size>
 )";
   } else if (isPrefix(args[1], "disassemble")) {
     std::cerr << R"(Debugger commands:

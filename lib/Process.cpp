@@ -5,6 +5,7 @@
 #include "DDB/Pipe.h"
 #include "DDB/RegisterInfo.h"
 #include "DDB/Types.h"
+#include "DDB/Watchpoint.h"
 
 #include <cerrno>
 #include <csignal>
@@ -301,9 +302,25 @@ DDB::BreakpointSite &DDB::Process::createBreakpointSite(VirtAddr addr,
       new BreakpointSite(*this, addr, hardware, internal)));
 }
 
+DDB::Watchpoint &DDB::Process::createWatchpoint(VirtAddr addr,
+                                                StoppointMode mode,
+                                                std::size_t size) {
+  if (m_watchpoints.containsAddr(addr)) {
+    Error::send("Watchpoint already created at address " +
+                std::to_string(addr.asInt()));
+  }
+  return m_watchpoints.push(
+      std::unique_ptr<Watchpoint>(new Watchpoint(*this, addr, mode, size)));
+}
+
 int DDB::Process::setHardwareBreakpoint(BreakpointSite::IdType id,
                                         VirtAddr addr) {
   return setHardwareStoppoint(addr, StoppointMode::Execute, 1);
+}
+
+int DDB::Process::setWatchpoint(Watchpoint::IdType id, VirtAddr addr,
+                                StoppointMode mode, std::size_t size) {
+  return setHardwareStoppoint(addr, mode, size);
 }
 
 void DDB::Process::clearHardwareStoppoint(int idx) {

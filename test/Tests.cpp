@@ -6,6 +6,7 @@
 #include "DDB/RegisterInfo.h"
 #include "DDB/Registers.h"
 #include "DDB/Types.h"
+#include "DDB/Watchpoint.h"
 
 #include <cerrno>
 #include <csignal>
@@ -424,10 +425,45 @@ TEST_CASE("Hardware breakpoint evade memory checksums", "[Breakpoint]") {
   proc->breakpointSites().removeById(softBs.id());
   BreakpointSite &hardBs =
       proc->createBreakpointSite(funcAddr, /*hardware=*/true);
-  // hardBs.enable(); // FIXME: For some reasons, enabling this will cause the test do get stuck here
+  // hardBs.enable(); // FIXME: For some reasons, enabling this will cause the
+                      // test do get stuck here
 
   proc->resume();
   proc->waitOnSignal();
 
   REQUIRE(toStringView(pipe.read()) == "Doing something evil...\n");
+}
+
+TEST_CASE("Watchpoint detects read", "[Watchpoint]") {
+  Pipe pipe(/*closeOnExec=*/false);
+  auto proc = Process::launch("targets/anti-debugger", /*debug=*/true,
+                              /*outFd=*/pipe.getWrite());
+  pipe.closeWrite();
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  auto funcAddr = VirtAddr(fromBytes<U64>(pipe.read().data()));
+
+  Watchpoint &wp =
+      proc->createWatchpoint(funcAddr, StoppointMode::ReadWrite, 1);
+  // wp.enable(); // FIXME: Same as above, enabling this will cause the test to
+                  // get stuck ..
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  proc->stepInstruction();
+  BreakpointSite &bp = proc->createBreakpointSite(funcAddr, /*hardware=*/false);
+  bp.enable();
+
+  proc->resume();
+  StopReason reason = proc->waitOnSignal();
+
+  REQUIRE(reason.info == SIGTRAP);
+
+  proc->resume();
+  proc->waitOnSignal();
+
+  // REQUIRE(toStringView(pipe.read()) == "Doing something evil...\n"); // FIXME: .. and the assertion to fail
 }

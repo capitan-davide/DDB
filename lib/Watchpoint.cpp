@@ -21,7 +21,7 @@ DDB::Watchpoint::Watchpoint(Process &proc, VirtAddr addr, StoppointMode mode,
 void DDB::Watchpoint::enable() {
   if (m_isEnabled)
     return;
-  // TODO: m_proc->setWatchpoint(...)
+  m_proc->setWatchpoint(m_id, m_addr, m_mode, m_size);
   m_isEnabled = true;
 }
 

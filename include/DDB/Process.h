@@ -6,6 +6,7 @@
 #include "DDB/Registers.h"
 #include "DDB/StoppointCollection.h"
 #include "DDB/Types.h"
+#include "DDB/Watchpoint.h"
 
 #include <cstddef>
 #include <filesystem>
@@ -84,8 +85,13 @@ public:
   /// TODO: Write documentation.
   BreakpointSite &createBreakpointSite(VirtAddr addr, bool hardware = false,
                                        bool internal = false);
+  Watchpoint &createWatchpoint(VirtAddr addr, StoppointMode mode,
+                               std::size_t size);
 
   int setHardwareBreakpoint(BreakpointSite::IdType id, VirtAddr addr);
+  int setWatchpoint(Watchpoint::IdType id, VirtAddr addr, StoppointMode mode,
+                    std::size_t size);
+
   void clearHardwareStoppoint(int idx);
 
   /// Step over a single machine instruction.
@@ -122,6 +128,11 @@ public:
     return m_breakpointSites;
   }
 
+  StoppointCollection<Watchpoint> &watchpoints() { return m_watchpoints; }
+  const StoppointCollection<Watchpoint> &watchpoints() const {
+    return m_watchpoints;
+  }
+
 private:
   Process(pid_t pid, bool termOnEnd, bool isAttached)
       : m_pid(pid), m_termOnEnd(termOnEnd), m_isAttached(isAttached),
@@ -147,6 +158,7 @@ private:
   std::unique_ptr<Registers> m_registers;
 
   StoppointCollection<BreakpointSite> m_breakpointSites;
+  StoppointCollection<Watchpoint> m_watchpoints;
 };
 
 } // namespace DDB
