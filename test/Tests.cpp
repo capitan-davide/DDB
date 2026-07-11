@@ -214,7 +214,7 @@ TEST_CASE("Read register works", "[Register]") {
   proc->resume();
   proc->waitOnSignal();
 
-  REQUIRE(regs.readByIdAs<U64>(RegisterId::r13) == 0xcafebabe); // FIXME!!!
+  REQUIRE(regs.readByIdAs<U64>(RegisterId::r13) == 0xcafebabe);
 
   proc->resume();
   proc->waitOnSignal();
@@ -425,8 +425,10 @@ TEST_CASE("Hardware breakpoint evade memory checksums", "[Breakpoint]") {
   proc->breakpointSites().removeById(softBs.id());
   BreakpointSite &hardBs =
       proc->createBreakpointSite(funcAddr, /*hardware=*/true);
-  // hardBs.enable(); // FIXME: For some reasons, enabling this will cause the
-                      // test do get stuck here
+  hardBs.enable();
+
+  proc->resume();
+  proc->waitOnSignal();
 
   proc->resume();
   proc->waitOnSignal();
@@ -447,8 +449,7 @@ TEST_CASE("Watchpoint detects read", "[Watchpoint]") {
 
   Watchpoint &wp =
       proc->createWatchpoint(funcAddr, StoppointMode::ReadWrite, 1);
-  // wp.enable(); // FIXME: Same as above, enabling this will cause the test to
-                  // get stuck ..
+  wp.enable();
 
   proc->resume();
   proc->waitOnSignal();
@@ -465,5 +466,5 @@ TEST_CASE("Watchpoint detects read", "[Watchpoint]") {
   proc->resume();
   proc->waitOnSignal();
 
-  // REQUIRE(toStringView(pipe.read()) == "Doing something evil...\n"); // FIXME: .. and the assertion to fail
+  REQUIRE(toStringView(pipe.read()) == "Doing something evil...\n");
 }

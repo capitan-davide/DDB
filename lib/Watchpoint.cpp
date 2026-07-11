@@ -14,14 +14,15 @@ DDB::Watchpoint::IdType getNextId() {
 
 DDB::Watchpoint::Watchpoint(Process &proc, VirtAddr addr, StoppointMode mode,
                             std::size_t size)
-    : m_proc(&proc), m_addr(addr), m_mode(mode), m_size(size) {
+    : m_proc(&proc), m_addr(addr), m_mode(mode), m_size(size),
+      m_isEnabled(false) {
   m_id = getNextId();
 }
 
 void DDB::Watchpoint::enable() {
   if (m_isEnabled)
     return;
-  m_proc->setWatchpoint(m_id, m_addr, m_mode, m_size);
+  m_hardwareRegisterIdx = m_proc->setWatchpoint(m_id, m_addr, m_mode, m_size);
   m_isEnabled = true;
 }
 
