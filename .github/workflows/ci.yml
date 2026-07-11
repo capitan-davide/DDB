@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      # The test suite forks children and ptrace()s them (software/hardware
+      # breakpoints, watchpoints), which needs CAP_SYS_PTRACE inside Docker.
+      # It also calls personality(ADDR_NO_RANDOMIZE) to disable ASLR for
+      # launched targets, which the default seccomp profile blocks.
+      options: --cap-add=SYS_PTRACE --security-opt seccomp=unconfined
+
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Sy --noconfirm archlinux-keyring
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed \
+            base-devel cmake git pkgconf fmt zydis catch2 libedit
+
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Test
+        working-directory: build/test
+        run: ./tests
