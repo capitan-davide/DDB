@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <csignal>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
@@ -23,6 +24,7 @@
 #include <variant>
 #include <vector>
 
+#include <signal.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -37,6 +39,11 @@
 using namespace std::string_view_literals;
 
 namespace {
+DDB::Process *g_DDBProcess;
+void handleSigInt(int) {
+  ::kill(g_DDBProcess->pid(), SIGSTOP);
+}
+
 std::unique_ptr<DDB::Process> attach(int argc, const char *argv[]);
 void mainLoop(std::unique_ptr<DDB::Process> &proc);
 void handleCommand(std::unique_ptr<DDB::Process> &proc, std::string_view line);
@@ -86,6 +93,8 @@ int main(int argc, const char *argv[]) {
   int ret = EXIT_SUCCESS;
   try {
     std::unique_ptr<DDB::Process> proc = attach(argc, argv);
+    g_DDBProcess = proc.get();
+    ::signal(SIGINT, handleSigInt);
     mainLoop(proc);
   } catch (const DDB::Error &err) {
     std::cout << err.what() << '\n';
