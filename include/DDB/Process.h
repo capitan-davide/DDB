@@ -22,27 +22,27 @@ namespace DDB {
 enum class ProcessState { Stopped, Running, Exited, Terminated };
 
 struct StopReason {
-  StopReason(int waitStatus);
+  StopReason(int WaitStatus);
 
-  ProcessState state;
-  U8 info;
+  ProcessState State;
+  U8 Info;
 };
 
 class Process {
 public:
   /// Launch a new process from the given executable path.
-  /// @param path Path to the executable to launch.
-  /// @param debug If true, the child process will be traced (ptraced).
-  /// @param outFd If set, the child's stdout will be redirected to this fd.
+  /// @param Path Path to the executable to launch.
+  /// @param Debug If true, the child process will be traced (ptraced).
+  /// @param OutFD If set, the child's stdout will be redirected to this fd.
   /// @return A unique pointer to the newly created Process.
-  static std::unique_ptr<Process> launch(std::filesystem::path path,
-                                         bool debug = true,
-                                         std::optional<int> outFd = {});
+  static std::unique_ptr<Process> launch(std::filesystem::path Path,
+                                         bool Debug = true,
+                                         std::optional<int> OutFD = {});
 
   /// Attach to an already-running process by its PID.
-  /// @param pid The process ID to attach to.
+  /// @param Pid The process ID to attach to.
   /// @return A unique pointer to the attached Process.
-  static std::unique_ptr<Process> attach(pid_t pid);
+  static std::unique_ptr<Process> attach(pid_t Pid);
 
   Process() = delete;
   Process(const Process &) = delete;
@@ -67,98 +67,98 @@ public:
   StopReason waitOnSignal();
 
   /// Write a word to the tracee's user area at the given offset.
-  /// @param offset Byte offset into the user area (must be word-aligned).
-  /// @param data The word to write.
+  /// @param Offset Byte offset into the user area (must be word-aligned).
+  /// @param Data The word to write.
   /// @throws Error if the operation fails.
-  void writeUserArea(std::size_t offset, U64 data);
+  void writeUserArea(std::size_t Offset, U64 Data);
 
   /// Write all floating-point registers to the tracee.
-  /// @param fprs The floating-point register state to write.
+  /// @param FPRs The floating-point register state to write.
   /// @throws Error if the operation fails.
-  void writeFPRs(const user_fpregs_struct &fprs);
+  void writeFPRs(const user_fpregs_struct &FPRs);
 
   /// Write all general-purpose registers to the tracee.
-  /// @param gprs The general-purpose register state to write.
+  /// @param GPRs The general-purpose register state to write.
   /// @throws Error if the operation fails.
-  void writeGPRs(const user_regs_struct &gprs);
+  void writeGPRs(const user_regs_struct &GPRs);
 
   /// TODO: Write documentation.
-  BreakpointSite &createBreakpointSite(VirtAddr addr, bool hardware = false,
-                                       bool internal = false);
-  Watchpoint &createWatchpoint(VirtAddr addr, StoppointMode mode,
-                               std::size_t size);
+  BreakpointSite &createBreakpointSite(VirtAddr Addr, bool Hardware = false,
+                                       bool Internal = false);
+  Watchpoint &createWatchpoint(VirtAddr Addr, StoppointMode Mode,
+                               std::size_t Size);
 
-  int setHardwareBreakpoint(BreakpointSite::IdType id, VirtAddr addr);
-  int setWatchpoint(Watchpoint::IdType id, VirtAddr addr, StoppointMode mode,
-                    std::size_t size);
+  int setHardwareBreakpoint(BreakpointSite::IdType Id, VirtAddr Addr);
+  int setWatchpoint(Watchpoint::IdType Id, VirtAddr Addr, StoppointMode Mode,
+                    std::size_t Size);
 
-  void clearHardwareStoppoint(int idx);
+  void clearHardwareStoppoint(int Idx);
 
   /// Step over a single machine instruction.
   /// @return A StopReason struct describing why the process stopped after
   ///         stepping.
   StopReason stepInstruction();
 
-  std::vector<std::byte> readMemory(VirtAddr addr, std::size_t nBytes) const;
-  std::vector<std::byte> readMemoryWithoutTraps(VirtAddr addr,
-                                                std::size_t nBytes) const;
-  void writeMemory(VirtAddr addr, Span<const std::byte> data) const;
+  std::vector<std::byte> readMemory(VirtAddr Addr, std::size_t NumBytes) const;
+  std::vector<std::byte> readMemoryWithoutTraps(VirtAddr Addr,
+                                                std::size_t NumBytes) const;
+  void writeMemory(VirtAddr Addr, Span<const std::byte> Data) const;
 
-  template <class T> T readMemoryAs(VirtAddr addr) const {
-    std::vector<std::byte> data = readMemory(addr, sizeof(T));
-    return fromBytes<T>(data.data());
+  template <class T> T readMemoryAs(VirtAddr Addr) const {
+    std::vector<std::byte> Data = readMemory(Addr, sizeof(T));
+    return fromBytes<T>(Data.data());
   }
 
-  pid_t pid() const { return m_pid; }
-  ProcessState state() const { return m_state; }
-  Registers &getRegisters() { return *m_registers; }
-  const Registers &getRegisters() const { return *m_registers; }
+  pid_t pid() const { return Pid; }
+  ProcessState state() const { return State; }
+  Registers &getRegisters() { return *TheRegisters; }
+  const Registers &getRegisters() const { return *TheRegisters; }
 
   VirtAddr getPC() const {
     return VirtAddr(getRegisters().readByIdAs<U64>(RegisterId::rip));
   }
-  void setPC(VirtAddr addr) {
-    getRegisters().writeById(RegisterId::rip, addr.asInt());
+  void setPC(VirtAddr Addr) {
+    getRegisters().writeById(RegisterId::rip, Addr.asInt());
   }
 
   StoppointCollection<BreakpointSite> &breakpointSites() {
-    return m_breakpointSites;
+    return BreakpointSites;
   }
   const StoppointCollection<BreakpointSite> &breakpointSites() const {
-    return m_breakpointSites;
+    return BreakpointSites;
   }
 
-  StoppointCollection<Watchpoint> &watchpoints() { return m_watchpoints; }
+  StoppointCollection<Watchpoint> &watchpoints() { return Watchpoints; }
   const StoppointCollection<Watchpoint> &watchpoints() const {
-    return m_watchpoints;
+    return Watchpoints;
   }
 
 private:
-  Process(pid_t pid, bool termOnEnd, bool isAttached)
-      : m_pid(pid), m_termOnEnd(termOnEnd), m_isAttached(isAttached),
-        m_registers(new Registers(*this)) {}
+  Process(pid_t Pid, bool TermOnEnd, bool IsAttached)
+      : Pid(Pid), TermOnEnd(TermOnEnd), IsAttached(IsAttached),
+        TheRegisters(new Registers(*this)) {}
 
   void readAllRegisters();
 
-  int setHardwareStoppoint(VirtAddr addr, StoppointMode mode, std::size_t size);
+  int setHardwareStoppoint(VirtAddr Addr, StoppointMode Mode, std::size_t Size);
 
   /// The process ID of this process.
-  pid_t m_pid;
+  pid_t Pid;
 
   /// If true, this process will be killed on destruction.
-  bool m_termOnEnd;
+  bool TermOnEnd;
 
   /// If true, this process is being traced.
-  bool m_isAttached;
+  bool IsAttached;
 
   /// The current state of this process.
-  ProcessState m_state = ProcessState::Stopped;
+  ProcessState State = ProcessState::Stopped;
 
   /// The register set of this process.
-  std::unique_ptr<Registers> m_registers;
+  std::unique_ptr<Registers> TheRegisters;
 
-  StoppointCollection<BreakpointSite> m_breakpointSites;
-  StoppointCollection<Watchpoint> m_watchpoints;
+  StoppointCollection<BreakpointSite> BreakpointSites;
+  StoppointCollection<Watchpoint> Watchpoints;
 };
 
 } // namespace DDB

@@ -13,93 +13,93 @@
 
 namespace DDB {
 template <class I>
-std::optional<I> toIntegral(std::string_view sv, int base = 10) {
-  auto begin = sv.begin();
-  if (base == 16 && sv.size() > 1 && begin[0] == '0' && begin[1] == 'x') {
-    begin += 2;
+std::optional<I> toIntegral(std::string_view Str, int Base = 10) {
+  auto Begin = Str.begin();
+  if (Base == 16 && Str.size() > 1 && Begin[0] == '0' && Begin[1] == 'x') {
+    Begin += 2;
   }
 
-  I ret;
-  auto [ptr, ec] = std::from_chars(begin, sv.end(), ret, base);
-  if (ec != std::errc()) {
+  I Ret;
+  auto [Ptr, EC] = std::from_chars(Begin, Str.end(), Ret, Base);
+  if (EC != std::errc()) {
     return std::nullopt;
   }
-  return ret;
+  return Ret;
 }
 
 template <>
-inline std::optional<std::byte> toIntegral(std::string_view sv, int base) {
-  std::optional<U8> u8 = toIntegral<U8>(sv, base);
-  if (u8) {
-    return static_cast<std::byte>(*u8);
+inline std::optional<std::byte> toIntegral(std::string_view Str, int Base) {
+  std::optional<U8> Val = toIntegral<U8>(Str, Base);
+  if (Val) {
+    return static_cast<std::byte>(*Val);
   }
   return std::nullopt;
 }
 
-template <class F> std::optional<F> toFloat(std::string_view sv) {
-  F ret;
-  auto [ptr, ec] = std::from_chars(sv.begin(), sv.end(), ret);
-  if (ec != std::errc()) {
+template <class F> std::optional<F> toFloat(std::string_view Str) {
+  F Ret;
+  auto [Ptr, EC] = std::from_chars(Str.begin(), Str.end(), Ret);
+  if (EC != std::errc()) {
     return std::nullopt;
   }
-  return ret;
+  return Ret;
 }
 
 template <std::size_t N>
-std::array<std::byte, N> parseVector(std::string_view text) {
-  auto sendInvalidFormat = [] { DDB::Error::send("Invalid format"); };
+std::array<std::byte, N> parseVector(std::string_view Text) {
+  auto SendInvalidFormat = [] { DDB::Error::send("Invalid format"); };
 
-  std::array<std::byte, N> bytes;
-  const char *c = text.data();
+  std::array<std::byte, N> Bytes;
+  const char *C = Text.data();
 
-  if (*c++ != '[') {
-    sendInvalidFormat();
+  if (*C++ != '[') {
+    SendInvalidFormat();
   }
 
-  for (std::size_t i = 0; i < N - 1; ++i) {
-    bytes[i] = toIntegral<std::byte>({c, 4}, 16).value();
-    c += 4;
-    if (*c++ != ',') {
-      sendInvalidFormat();
+  for (std::size_t I = 0; I < N - 1; ++I) {
+    Bytes[I] = toIntegral<std::byte>({C, 4}, 16).value();
+    C += 4;
+    if (*C++ != ',') {
+      SendInvalidFormat();
     }
   }
-  bytes[N - 1] = toIntegral<std::byte>({c, 4}, 16).value();
-  c += 4;
+  Bytes[N - 1] = toIntegral<std::byte>({C, 4}, 16).value();
+  C += 4;
 
-  if (*c++ != ']') {
-    sendInvalidFormat();
+  if (*C++ != ']') {
+    SendInvalidFormat();
   }
-  if (c != text.end()) {
-    sendInvalidFormat();
+  if (C != Text.end()) {
+    SendInvalidFormat();
   }
 
-  return bytes;
+  return Bytes;
 }
 
-inline std::vector<std::byte> parseVector(std::string_view text) {
-  auto sendInvalidFormat = [] { DDB::Error::send("Invalid format"); };
+inline std::vector<std::byte> parseVector(std::string_view Text) {
+  auto SendInvalidFormat = [] { DDB::Error::send("Invalid format"); };
 
-  std::vector<std::byte> bytes;
-  const char *c = text.data();
+  std::vector<std::byte> Bytes;
+  const char *C = Text.data();
 
-  if (*c++ != '[')
-    sendInvalidFormat();
+  if (*C++ != '[')
+    SendInvalidFormat();
 
-  while (*c != ']') {
-    auto byte = DDB::toIntegral<std::byte>({c, 4}, 16);
-    bytes.push_back(byte.value());
-    c += 4;
+  while (*C != ']') {
+    auto Byte = DDB::toIntegral<std::byte>({C, 4}, 16);
+    Bytes.push_back(Byte.value());
+    C += 4;
 
-    if (*c == ',')
-      ++c;
-    else if (*c != ']')
-      sendInvalidFormat();
+    if (*C == ',')
+      ++C;
+    else if (*C != ']')
+      SendInvalidFormat();
   }
 
-  if (++c != text.end())
-    sendInvalidFormat();
+  if (++C != Text.end())
+    SendInvalidFormat();
 
-  return bytes;
+  return Bytes;
 }
 } // namespace DDB
 

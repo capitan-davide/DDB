@@ -7,28 +7,27 @@
 
 namespace {
 DDB::Watchpoint::IdType getNextId() {
-  static DDB::Watchpoint::IdType s_id = 0;
-  return ++s_id;
+  static DDB::Watchpoint::IdType NextId = 0;
+  return ++NextId;
 }
 } // namespace
 
-DDB::Watchpoint::Watchpoint(Process &proc, VirtAddr addr, StoppointMode mode,
-                            std::size_t size)
-    : m_proc(&proc), m_addr(addr), m_mode(mode), m_size(size),
-      m_isEnabled(false) {
-  m_id = getNextId();
+DDB::Watchpoint::Watchpoint(Process &Proc, VirtAddr Addr, StoppointMode Mode,
+                            std::size_t Size)
+    : Proc(&Proc), Addr(Addr), Mode(Mode), Size(Size), IsEnabled(false) {
+  Id = getNextId();
 }
 
 void DDB::Watchpoint::enable() {
-  if (m_isEnabled)
+  if (IsEnabled)
     return;
-  m_hardwareRegisterIdx = m_proc->setWatchpoint(m_id, m_addr, m_mode, m_size);
-  m_isEnabled = true;
+  HardwareRegisterIdx = Proc->setWatchpoint(Id, Addr, Mode, Size);
+  IsEnabled = true;
 }
 
 void DDB::Watchpoint::disable() {
-  if (!m_isEnabled)
+  if (!IsEnabled)
     return;
-  m_proc->clearHardwareStoppoint(m_hardwareRegisterIdx);
-  m_isEnabled = false;
+  Proc->clearHardwareStoppoint(HardwareRegisterIdx);
+  IsEnabled = false;
 }

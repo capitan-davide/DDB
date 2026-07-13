@@ -9,38 +9,38 @@
 #include <vector>
 
 namespace DDB {
-template <class To> To fromBytes(const std::byte *bytes) {
-  To ret;
-  std::memcpy(&ret, bytes, sizeof(To));
-  return ret;
+template <class To> To fromBytes(const std::byte *Bytes) {
+  To Ret;
+  std::memcpy(&Ret, Bytes, sizeof(To));
+  return Ret;
 }
 
-template <class From> std::byte *asBytes(From &from) {
-  return reinterpret_cast<std::byte *>(&from);
+template <class From> std::byte *asBytes(From &Val) {
+  return reinterpret_cast<std::byte *>(&Val);
 }
 
-template <class From> const std::byte *asBytes(const From &from) {
-  return reinterpret_cast<const std::byte *>(&from);
+template <class From> const std::byte *asBytes(const From &Val) {
+  return reinterpret_cast<const std::byte *>(&Val);
 }
 
-template <class From> Byte64 toByte64(From src) {
-  Byte64 ret{};
-  std::memcpy(&ret, &src, sizeof(From));
-  return ret;
+template <class From> Byte64 toByte64(From Src) {
+  Byte64 Ret{};
+  std::memcpy(&Ret, &Src, sizeof(From));
+  return Ret;
 }
 
-template <class From> Byte128 toByte128(From src) {
-  Byte128 ret{};
-  std::memcpy(&ret, &src, sizeof(From));
-  return ret;
+template <class From> Byte128 toByte128(From Src) {
+  Byte128 Ret{};
+  std::memcpy(&Ret, &Src, sizeof(From));
+  return Ret;
 }
 
-inline std::string_view toStringView(const std::byte *data, std::size_t size) {
-  return {reinterpret_cast<const char *>(data), size};
+inline std::string_view toStringView(const std::byte *Data, std::size_t Size) {
+  return {reinterpret_cast<const char *>(Data), Size};
 }
 
-inline std::string_view toStringView(const std::vector<std::byte> &data) {
-  return toStringView(data.data(), data.size());
+inline std::string_view toStringView(const std::vector<std::byte> &Data) {
+  return toStringView(Data.data(), Data.size());
 }
 } // namespace DDB
 

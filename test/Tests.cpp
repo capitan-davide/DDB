@@ -27,71 +27,71 @@
 using namespace DDB;
 
 namespace {
-bool processExists(pid_t pid) {
-  int ret = kill(pid, 0);
-  return ret != -1 || errno != ESRCH;
+bool processExists(pid_t Pid) {
+  int Ret = kill(Pid, 0);
+  return Ret != -1 || errno != ESRCH;
 }
 
-char getProcessStatus(pid_t pid) {
-  std::ifstream stat("/proc/" + std::to_string(pid) + "/stat");
-  std::string line;
-  std::getline(stat, line);
-  std::size_t lastParenPos = line.rfind(')');
-  std::size_t statusCharPos = lastParenPos + 2;
-  return line[statusCharPos];
+char getProcessStatus(pid_t Pid) {
+  std::ifstream Stat("/proc/" + std::to_string(Pid) + "/stat");
+  std::string Line;
+  std::getline(Stat, Line);
+  std::size_t LastParenPos = Line.rfind(')');
+  std::size_t StatusCharPos = LastParenPos + 2;
+  return Line[StatusCharPos];
 }
 
-U64 getSectionLoadBias(std::filesystem::path path, Elf64_Addr fileAddr) {
-  std::string cmd = "readelf -WS " + path.string();
-  std::FILE *pipe = ::popen(cmd.c_str(), "r");
+U64 getSectionLoadBias(std::filesystem::path Path, Elf64_Addr FileAddr) {
+  std::string Cmd = "readelf -WS " + Path.string();
+  std::FILE *CmdPipe = ::popen(Cmd.c_str(), "r");
 
-  std::regex textRefex(R"(PROGBITS\s+(\w+)\s+(\w+)\s+(\w+))");
-  char *line = nullptr;
-  std::size_t len = 0;
-  while (::getline(&line, &len, pipe) != -1) {
-    std::cmatch groups;
-    if (std::regex_search(line, groups, textRefex)) {
-      long addr = std::stol(groups[1], nullptr, 16);
-      long offs = std::stol(groups[2], nullptr, 16);
-      long size = std::stol(groups[3], nullptr, 16);
-      if (addr <= fileAddr && fileAddr < (addr + size)) {
-        ::free(line);
-        ::pclose(pipe);
-        return addr - offs;
+  std::regex TextRegex(R"(PROGBITS\s+(\w+)\s+(\w+)\s+(\w+))");
+  char *Line = nullptr;
+  std::size_t Len = 0;
+  while (::getline(&Line, &Len, CmdPipe) != -1) {
+    std::cmatch Groups;
+    if (std::regex_search(Line, Groups, TextRegex)) {
+      long Addr = std::stol(Groups[1], nullptr, 16);
+      long Offs = std::stol(Groups[2], nullptr, 16);
+      long Size = std::stol(Groups[3], nullptr, 16);
+      if (Addr <= FileAddr && FileAddr < (Addr + Size)) {
+        ::free(Line);
+        ::pclose(CmdPipe);
+        return Addr - Offs;
       }
     }
-    ::free(line);
-    line = nullptr;
+    ::free(Line);
+    Line = nullptr;
   }
 
-  ::pclose(pipe);
+  ::pclose(CmdPipe);
   Error::send("Could not find section load bias");
 }
 
-U64 getEntryPointOffset(std::filesystem::path path) {
-  std::ifstream elfFile(path);
+U64 getEntryPointOffset(std::filesystem::path Path) {
+  std::ifstream ElfFile(Path);
 
-  Elf64_Ehdr header;
-  elfFile.read(reinterpret_cast<char *>(&header), sizeof(header));
+  Elf64_Ehdr Header;
+  ElfFile.read(reinterpret_cast<char *>(&Header), sizeof(Header));
 
-  Elf64_Addr entryFileAddr = header.e_entry;
-  U64 loadBias = getSectionLoadBias(path, entryFileAddr);
-  return entryFileAddr - loadBias;
+  Elf64_Addr EntryFileAddr = Header.e_entry;
+  U64 LoadBias = getSectionLoadBias(Path, EntryFileAddr);
+  return EntryFileAddr - LoadBias;
 }
 
-VirtAddr getLoadAddr(pid_t pid, U64 offs) {
-  std::ifstream maps("/proc/" + std::to_string(pid) + "/maps");
-  std::regex mapRegex(R"((\w+)-\w+ ..(.). (\w+))");
+VirtAddr getLoadAddr(pid_t Pid, U64 Offs) {
+  std::ifstream Maps("/proc/" + std::to_string(Pid) + "/maps");
+  std::regex MapRegex(R"((\w+)-\w+ ..(.). (\w+))");
 
-  std::string data;
-  while (std::getline(maps, data)) {
-    std::smatch groups;
-    std::regex_search(data, groups, mapRegex);
+  std::string Data;
+  while (std::getline(Maps, Data)) {
+    std::smatch Groups;
+    std::regex_search(Data, Groups, MapRegex);
 
-    if (groups[2] == 'x') {
-      long lowRange = std::stol(groups[1], nullptr, 16);
-      long fileOffs = std::stol(groups[3], nullptr, 16);
-      return VirtAddr(offs - fileOffs + lowRange);
+    if (Groups[2] == 'x') {
+      long LowRange = std::stol(Groups[1], nullptr, 16);
+      long FileOffs = std::stol(Groups[3], nullptr, 16);
+      return VirtAddr(Offs - FileOffs + LowRange);
     }
   }
   Error::send("Could not find load address");
@@ -99,8 +99,8 @@ VirtAddr getLoadAddr(pid_t pid, U64 offs) {
 } // namespace
 
 TEST_CASE("Process::launch success", "[Process]") {
-  auto proc = Process::launch("yes");
-  REQUIRE(processExists(proc->pid()));
+  auto Proc = Process::launch("yes");
+  REQUIRE(processExists(Proc->pid()));
 }
 
 TEST_CASE("Process::launch no such program", "[Process]") {
@@ -108,9 +108,9 @@ TEST_CASE("Process::launch no such program", "[Process]") {
 }
 
 TEST_CASE("Process::attach success", "[Process]") {
-  auto target = Process::launch("targets/run-endlessly", false);
-  auto proc = Process::attach(target->pid());
-  REQUIRE(getProcessStatus(target->pid()) == 't');
+  auto Target = Process::launch("targets/run-endlessly", false);
+  auto Proc = Process::attach(Target->pid());
+  REQUIRE(getProcessStatus(Target->pid()) == 't');
 }
 
 TEST_CASE("Process::attach invalid PID", "[Process]") {
@@ -119,352 +119,352 @@ TEST_CASE("Process::attach invalid PID", "[Process]") {
 
 TEST_CASE("Process::resume success", "[Process]") {
   {
-    auto proc = Process::launch("targets/run-endlessly");
-    proc->resume();
-    char status = getProcessStatus(proc->pid());
-    REQUIRE((status == 'R' || status == 'S'));
+    auto Proc = Process::launch("targets/run-endlessly");
+    Proc->resume();
+    char Status = getProcessStatus(Proc->pid());
+    REQUIRE((Status == 'R' || Status == 'S'));
   }
   {
-    auto target = Process::launch("targets/run-endlessly", false);
-    auto proc = Process::attach(target->pid());
-    proc->resume();
-    char status = getProcessStatus(proc->pid());
-    REQUIRE((status == 'R' || status == 'S'));
+    auto Target = Process::launch("targets/run-endlessly", false);
+    auto Proc = Process::attach(Target->pid());
+    Proc->resume();
+    char Status = getProcessStatus(Proc->pid());
+    REQUIRE((Status == 'R' || Status == 'S'));
   }
 }
 
 TEST_CASE("Process::resume not traced", "[Process]") {
-  auto proc = Process::launch("targets/run-endlessly", false);
-  REQUIRE_THROWS_AS(proc->resume(), Error);
+  auto Proc = Process::launch("targets/run-endlessly", false);
+  REQUIRE_THROWS_AS(Proc->resume(), Error);
 }
 
 TEST_CASE("Process::resume already terminated", "[Process]") {
-  auto proc = Process::launch("targets/end-immediately");
-  proc->resume();
-  proc->waitOnSignal();
-  REQUIRE_THROWS_AS(proc->resume(), Error);
+  auto Proc = Process::launch("targets/end-immediately");
+  Proc->resume();
+  Proc->waitOnSignal();
+  REQUIRE_THROWS_AS(Proc->resume(), Error);
 }
 
 TEST_CASE("Process::writeUserArea not traced", "[Process]") {
-  auto proc = Process::launch("targets/run-endlessly", false);
-  REQUIRE_THROWS_AS(proc->writeUserArea(0, 0), Error);
+  auto Proc = Process::launch("targets/run-endlessly", false);
+  REQUIRE_THROWS_AS(Proc->writeUserArea(0, 0), Error);
 }
 
 TEST_CASE("Write registers works", "[Register]") {
-  Pipe pipe(/*closeOnExec=*/false);
+  Pipe Pipe(/*CloseOnExec=*/false);
 
-  auto proc = Process::launch("targets/reg-write", /*debug=*/true,
-                              /*outFd=*/pipe.getWrite());
-  pipe.closeWrite();
+  auto Proc = Process::launch("targets/reg-write", /*Debug=*/true,
+                              /*OutFD=*/Pipe.getWrite());
+  Pipe.closeWrite();
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  Registers &regs = proc->getRegisters();
-  regs.writeById(RegisterId::rsi, 0xcafebabe);
+  Registers &Regs = Proc->getRegisters();
+  Regs.writeById(RegisterId::rsi, 0xcafebabe);
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  auto out = pipe.read();
-  REQUIRE(toStringView(out) == "0xcafebabe");
+  auto Out = Pipe.read();
+  REQUIRE(toStringView(Out) == "0xcafebabe");
 
-  regs.writeById(RegisterId::mm0, 0xba5eba11);
+  Regs.writeById(RegisterId::mm0, 0xba5eba11);
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  out = pipe.read();
-  REQUIRE(toStringView(out) == "0xba5eba11");
+  Out = Pipe.read();
+  REQUIRE(toStringView(Out) == "0xba5eba11");
 
-  regs.writeById(RegisterId::xmm0, 42.24);
+  Regs.writeById(RegisterId::xmm0, 42.24);
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  out = pipe.read();
-  REQUIRE(toStringView(out) == "42.24");
+  Out = Pipe.read();
+  REQUIRE(toStringView(Out) == "42.24");
 
-  regs.writeById(RegisterId::st0, 42.24l);
+  Regs.writeById(RegisterId::st0, 42.24l);
 
   // The status word tracks the current size of the FPU stack and reports
   // errors. It's 16 bits wide and bits 11 through 13 track the top of the
   // stack. Its value starts at index 0 and goes down instead of up, wrapping
   // around 7. So, to push a value to the stack, we set bits 11 through 13 to
   // 0b111.
-  regs.writeById(RegisterId::fsw, U16(0b00111000'00000000));
+  Regs.writeById(RegisterId::fsw, U16(0b00111000'00000000));
 
   // The tag register tracks which of the 'st' registers are valid, empty, or
   // special (i.e., NaNs or infinity). A tag of 0b11 means empty, 0b00 means
   // valid. We want to set the first tag to 0b00 and the rest to 0b11.
-  regs.writeById(RegisterId::ftw, U16(0b00111111'11111111));
+  Regs.writeById(RegisterId::ftw, U16(0b00111111'11111111));
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  out = pipe.read();
-  REQUIRE(toStringView(out) == "42.24");
+  Out = Pipe.read();
+  REQUIRE(toStringView(Out) == "42.24");
 }
 
 TEST_CASE("Read register works", "[Register]") {
-  auto proc = Process::launch("targets/reg-read");
+  auto Proc = Process::launch("targets/reg-read");
 
-  Registers &regs = proc->getRegisters();
+  Registers &Regs = Proc->getRegisters();
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  REQUIRE(regs.readByIdAs<U64>(RegisterId::r13) == 0xcafebabe);
+  REQUIRE(Regs.readByIdAs<U64>(RegisterId::r13) == 0xcafebabe);
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  REQUIRE(regs.readByIdAs<U8>(RegisterId::r13b) == 42);
+  REQUIRE(Regs.readByIdAs<U8>(RegisterId::r13b) == 42);
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  REQUIRE(regs.readByIdAs<Byte64>(RegisterId::mm0) == toByte64(0xba5eba11));
+  REQUIRE(Regs.readByIdAs<Byte64>(RegisterId::mm0) == toByte64(0xba5eba11));
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  REQUIRE(regs.readByIdAs<Byte128>(RegisterId::xmm0) == toByte128(64.125));
+  REQUIRE(Regs.readByIdAs<Byte128>(RegisterId::xmm0) == toByte128(64.125));
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  REQUIRE(regs.readByIdAs<F128>(RegisterId::st0) == 64.125L);
+  REQUIRE(Regs.readByIdAs<F128>(RegisterId::st0) == 64.125L);
 }
 
 TEST_CASE("Can create breakpoint site", "[Breakpoint]") {
-  auto proc = Process::launch("targets/run-endlessly");
-  BreakpointSite &bs = proc->createBreakpointSite(VirtAddr(42));
-  REQUIRE(bs.addr().asInt() == 42);
+  auto Proc = Process::launch("targets/run-endlessly");
+  BreakpointSite &BS = Proc->createBreakpointSite(VirtAddr(42));
+  REQUIRE(BS.addr().asInt() == 42);
 }
 
-TEST_CASE("Breakpointside IDs increase", "[Breakpont]") {
-  auto proc = Process::launch("targets/run-endlessly");
+TEST_CASE("Breakpoint site IDs increase", "[Breakpoint]") {
+  auto Proc = Process::launch("targets/run-endlessly");
 
-  auto &bs1 = proc->createBreakpointSite(VirtAddr(42));
-  REQUIRE(bs1.addr().asInt() == 42);
+  auto &BS1 = Proc->createBreakpointSite(VirtAddr(42));
+  REQUIRE(BS1.addr().asInt() == 42);
 
-  auto &bs2 = proc->createBreakpointSite(VirtAddr(43));
-  REQUIRE(bs2.id() == bs1.id() + 1);
+  auto &BS2 = Proc->createBreakpointSite(VirtAddr(43));
+  REQUIRE(BS2.id() == BS1.id() + 1);
 
-  auto &bs3 = proc->createBreakpointSite(VirtAddr(44));
-  REQUIRE(bs3.id() == bs2.id() + 1);
+  auto &BS3 = Proc->createBreakpointSite(VirtAddr(44));
+  REQUIRE(BS3.id() == BS2.id() + 1);
 
-  auto &bs4 = proc->createBreakpointSite(VirtAddr(45));
-  REQUIRE(bs4.id() == bs3.id() + 1);
+  auto &BS4 = Proc->createBreakpointSite(VirtAddr(45));
+  REQUIRE(BS4.id() == BS3.id() + 1);
 }
 
 TEST_CASE("Can find breakpoint site", "[Breakpoint]") {
-  auto proc = Process::launch("targets/run-endlessly");
-  const auto &cproc = proc;
+  auto Proc = Process::launch("targets/run-endlessly");
+  const auto &CProc = Proc;
 
-  proc->createBreakpointSite(VirtAddr(42));
-  proc->createBreakpointSite(VirtAddr(43));
-  proc->createBreakpointSite(VirtAddr(44));
-  proc->createBreakpointSite(VirtAddr(45));
+  Proc->createBreakpointSite(VirtAddr(42));
+  Proc->createBreakpointSite(VirtAddr(43));
+  Proc->createBreakpointSite(VirtAddr(44));
+  Proc->createBreakpointSite(VirtAddr(45));
 
-  auto &s1 = proc->breakpointSites().getByAddr(VirtAddr(44));
-  REQUIRE(proc->breakpointSites().containsAddr(VirtAddr(44)));
-  REQUIRE(s1.addr().asInt() == 44);
+  auto &S1 = Proc->breakpointSites().getByAddr(VirtAddr(44));
+  REQUIRE(Proc->breakpointSites().containsAddr(VirtAddr(44)));
+  REQUIRE(S1.addr().asInt() == 44);
 
-  auto &cs1 = cproc->breakpointSites().getByAddr(VirtAddr(44));
-  REQUIRE(cproc->breakpointSites().containsAddr(VirtAddr(44)));
-  REQUIRE(cs1.addr().asInt() == 44);
+  auto &CS1 = CProc->breakpointSites().getByAddr(VirtAddr(44));
+  REQUIRE(CProc->breakpointSites().containsAddr(VirtAddr(44)));
+  REQUIRE(CS1.addr().asInt() == 44);
 
-  auto &s2 = proc->breakpointSites().getById(s1.id() + 1);
-  REQUIRE(proc->breakpointSites().containsId(s1.id() + 1));
-  REQUIRE(s2.id() == s1.id() + 1);
-  REQUIRE(s2.addr().asInt() == 45);
+  auto &S2 = Proc->breakpointSites().getById(S1.id() + 1);
+  REQUIRE(Proc->breakpointSites().containsId(S1.id() + 1));
+  REQUIRE(S2.id() == S1.id() + 1);
+  REQUIRE(S2.addr().asInt() == 45);
 
-  auto &cs2 = cproc->breakpointSites().getById(cs1.id() + 1);
-  REQUIRE(cproc->breakpointSites().containsId(cs1.id() + 1));
-  REQUIRE(cs2.id() == cs1.id() + 1);
-  REQUIRE(cs2.addr().asInt() == 45);
+  auto &CS2 = CProc->breakpointSites().getById(CS1.id() + 1);
+  REQUIRE(CProc->breakpointSites().containsId(CS1.id() + 1));
+  REQUIRE(CS2.id() == CS1.id() + 1);
+  REQUIRE(CS2.addr().asInt() == 45);
 }
 
 TEST_CASE("Cannot find breakpoint site", "[Breakpoint]") {
-  auto proc = Process::launch("targets/run-endlessly");
-  const auto &cproc = proc;
+  auto Proc = Process::launch("targets/run-endlessly");
+  const auto &CProc = Proc;
 
-  REQUIRE_THROWS_AS(proc->breakpointSites().getByAddr(VirtAddr(44)), Error);
-  REQUIRE_THROWS_AS(proc->breakpointSites().getById(44), Error);
-  REQUIRE_THROWS_AS(cproc->breakpointSites().getByAddr(VirtAddr(44)), Error);
-  REQUIRE_THROWS_AS(cproc->breakpointSites().getById(44), Error);
+  REQUIRE_THROWS_AS(Proc->breakpointSites().getByAddr(VirtAddr(44)), Error);
+  REQUIRE_THROWS_AS(Proc->breakpointSites().getById(44), Error);
+  REQUIRE_THROWS_AS(CProc->breakpointSites().getByAddr(VirtAddr(44)), Error);
+  REQUIRE_THROWS_AS(CProc->breakpointSites().getById(44), Error);
 }
 
-TEST_CASE("Breakpoint site list size and emptiness", "[Breakpont]") {
-  auto proc = Process::launch("targets/run-endlessly");
-  const auto &cproc = proc;
+TEST_CASE("Breakpoint site list size and emptiness", "[Breakpoint]") {
+  auto Proc = Process::launch("targets/run-endlessly");
+  const auto &CProc = Proc;
 
-  REQUIRE(proc->breakpointSites().empty());
-  REQUIRE(proc->breakpointSites().size() == 0);
-  REQUIRE(cproc->breakpointSites().empty());
-  REQUIRE(cproc->breakpointSites().size() == 0);
+  REQUIRE(Proc->breakpointSites().empty());
+  REQUIRE(Proc->breakpointSites().size() == 0);
+  REQUIRE(CProc->breakpointSites().empty());
+  REQUIRE(CProc->breakpointSites().size() == 0);
 
-  proc->createBreakpointSite(VirtAddr(42));
-  REQUIRE(!proc->breakpointSites().empty());
-  REQUIRE(proc->breakpointSites().size() == 1);
-  REQUIRE(!cproc->breakpointSites().empty());
-  REQUIRE(cproc->breakpointSites().size() == 1);
+  Proc->createBreakpointSite(VirtAddr(42));
+  REQUIRE(!Proc->breakpointSites().empty());
+  REQUIRE(Proc->breakpointSites().size() == 1);
+  REQUIRE(!CProc->breakpointSites().empty());
+  REQUIRE(CProc->breakpointSites().size() == 1);
 
-  proc->createBreakpointSite(VirtAddr(43));
-  REQUIRE(!proc->breakpointSites().empty());
-  REQUIRE(proc->breakpointSites().size() == 2);
-  REQUIRE(!cproc->breakpointSites().empty());
-  REQUIRE(cproc->breakpointSites().size() == 2);
+  Proc->createBreakpointSite(VirtAddr(43));
+  REQUIRE(!Proc->breakpointSites().empty());
+  REQUIRE(Proc->breakpointSites().size() == 2);
+  REQUIRE(!CProc->breakpointSites().empty());
+  REQUIRE(CProc->breakpointSites().size() == 2);
 }
 
-TEST_CASE("Can iterate breakpoint sites", "[Breakpont]") {
-  auto proc = Process::launch("targets/run-endlessly");
-  const auto &cproc = proc;
+TEST_CASE("Can iterate breakpoint sites", "[Breakpoint]") {
+  auto Proc = Process::launch("targets/run-endlessly");
+  const auto &CProc = Proc;
 
-  proc->createBreakpointSite(VirtAddr(42));
-  proc->createBreakpointSite(VirtAddr(43));
-  proc->createBreakpointSite(VirtAddr(44));
-  proc->createBreakpointSite(VirtAddr(45));
+  Proc->createBreakpointSite(VirtAddr(42));
+  Proc->createBreakpointSite(VirtAddr(43));
+  Proc->createBreakpointSite(VirtAddr(44));
+  Proc->createBreakpointSite(VirtAddr(45));
 
-  proc->breakpointSites().forEach(
-      [addr = 42](auto &bs) mutable { REQUIRE(bs.addr().asInt() == addr++); });
+  Proc->breakpointSites().forEach(
+      [Addr = 42](auto &BS) mutable { REQUIRE(BS.addr().asInt() == Addr++); });
 
-  cproc->breakpointSites().forEach(
-      [addr = 42](auto &bs) mutable { REQUIRE(bs.addr().asInt() == addr++); });
+  CProc->breakpointSites().forEach(
+      [Addr = 42](auto &BS) mutable { REQUIRE(BS.addr().asInt() == Addr++); });
 }
 
 TEST_CASE("Breakpoint on address works", "[Breakpoint]") {
-  Pipe pipe(/*closeOnExec=*/false);
+  Pipe Pipe(/*CloseOnExec=*/false);
 
-  auto proc = Process::launch("targets/hello-ddb", /*debug=*/true,
-                              /*outFd=*/pipe.getWrite());
-  pipe.closeWrite();
+  auto Proc = Process::launch("targets/hello-ddb", /*Debug=*/true,
+                              /*OutFD=*/Pipe.getWrite());
+  Pipe.closeWrite();
 
-  U64 offs = getEntryPointOffset("targets/hello-ddb");
-  VirtAddr loadAddr = getLoadAddr(proc->pid(), offs);
+  U64 Offs = getEntryPointOffset("targets/hello-ddb");
+  VirtAddr LoadAddr = getLoadAddr(Proc->pid(), Offs);
 
-  proc->createBreakpointSite(loadAddr).enable();
-  proc->resume();
-  StopReason reason = proc->waitOnSignal();
+  Proc->createBreakpointSite(LoadAddr).enable();
+  Proc->resume();
+  StopReason Reason = Proc->waitOnSignal();
 
-  REQUIRE(reason.state == ProcessState::Stopped);
-  REQUIRE(reason.info == SIGTRAP);
-  REQUIRE(proc->getPC() == loadAddr);
+  REQUIRE(Reason.State == ProcessState::Stopped);
+  REQUIRE(Reason.Info == SIGTRAP);
+  REQUIRE(Proc->getPC() == LoadAddr);
 
-  proc->resume();
-  reason = proc->waitOnSignal();
+  Proc->resume();
+  Reason = Proc->waitOnSignal();
 
-  REQUIRE(reason.state == ProcessState::Exited);
-  REQUIRE(reason.info == 0);
+  REQUIRE(Reason.State == ProcessState::Exited);
+  REQUIRE(Reason.Info == 0);
 
-  std::vector<std::byte> data = pipe.read();
-  REQUIRE(toStringView(data) == "Hello, DDB!\n");
+  std::vector<std::byte> Data = Pipe.read();
+  REQUIRE(toStringView(Data) == "Hello, DDB!\n");
 }
 
 TEST_CASE("Can remove breakpoint sites", "[Breakpoint]") {
-  auto proc = Process::launch("targets/run-endlessly");
+  auto Proc = Process::launch("targets/run-endlessly");
 
-  BreakpointSite &bs = proc->createBreakpointSite(VirtAddr(42));
-  proc->createBreakpointSite(VirtAddr(43));
-  REQUIRE(proc->breakpointSites().size() == 2);
+  BreakpointSite &BS = Proc->createBreakpointSite(VirtAddr(42));
+  Proc->createBreakpointSite(VirtAddr(43));
+  REQUIRE(Proc->breakpointSites().size() == 2);
 
-  proc->breakpointSites().removeById(bs.id());
-  proc->breakpointSites().removeByAddr(VirtAddr(43));
-  REQUIRE(proc->breakpointSites().empty());
+  Proc->breakpointSites().removeById(BS.id());
+  Proc->breakpointSites().removeByAddr(VirtAddr(43));
+  REQUIRE(Proc->breakpointSites().empty());
 }
 
 TEST_CASE("Reading and writing memory works", "[Memory]") {
-  Pipe pipe(/*closeOnExec=*/true);
-  auto proc = Process::launch("targets/memory", /*debug=*/true,
-                              /*outFd=*/pipe.getWrite());
-  pipe.closeWrite();
+  Pipe Pipe(/*CloseOnExec=*/true);
+  auto Proc = Process::launch("targets/memory", /*Debug=*/true,
+                              /*OutFD=*/Pipe.getWrite());
+  Pipe.closeWrite();
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  auto aAddr = fromBytes<U64>(pipe.read().data());
-  std::vector<std::byte> aVec = proc->readMemory(VirtAddr(aAddr), 8);
-  auto a = fromBytes<U64>(aVec.data());
-  REQUIRE(a == 0xcafebabe);
+  auto AAddr = fromBytes<U64>(Pipe.read().data());
+  std::vector<std::byte> AVec = Proc->readMemory(VirtAddr(AAddr), 8);
+  auto A = fromBytes<U64>(AVec.data());
+  REQUIRE(A == 0xcafebabe);
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  auto bAddr = fromBytes<U64>(pipe.read().data());
-  proc->writeMemory(VirtAddr(bAddr), {asBytes("Hello, DDB!"), 12});
+  auto BAddr = fromBytes<U64>(Pipe.read().data());
+  Proc->writeMemory(VirtAddr(BAddr), {asBytes("Hello, DDB!"), 12});
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  std::vector<std::byte> b = pipe.read();
-  REQUIRE(toStringView(b) == "Hello, DDB!");
+  std::vector<std::byte> B = Pipe.read();
+  REQUIRE(toStringView(B) == "Hello, DDB!");
 }
 
 TEST_CASE("Hardware breakpoint evade memory checksums", "[Breakpoint]") {
-  Pipe pipe(/*closeOnExec=*/true);
-  auto proc = Process::launch("targets/anti-debugger", /*debug=*/true,
-                              /*outFd=*/pipe.getWrite());
-  pipe.closeWrite();
+  Pipe Pipe(/*CloseOnExec=*/true);
+  auto Proc = Process::launch("targets/anti-debugger", /*Debug=*/true,
+                              /*OutFD=*/Pipe.getWrite());
+  Pipe.closeWrite();
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  auto funcAddr = VirtAddr(fromBytes<U64>(pipe.read().data()));
+  auto FuncAddr = VirtAddr(fromBytes<U64>(Pipe.read().data()));
 
-  BreakpointSite &softBs =
-      proc->createBreakpointSite(funcAddr, /*hardware=*/false);
-  softBs.enable();
+  BreakpointSite &SoftBS =
+      Proc->createBreakpointSite(FuncAddr, /*Hardware=*/false);
+  SoftBS.enable();
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  REQUIRE(toStringView(pipe.read()) == "Doing something innocent...\n");
+  REQUIRE(toStringView(Pipe.read()) == "Doing something innocent...\n");
 
-  proc->breakpointSites().removeById(softBs.id());
-  BreakpointSite &hardBs =
-      proc->createBreakpointSite(funcAddr, /*hardware=*/true);
-  hardBs.enable();
+  Proc->breakpointSites().removeById(SoftBS.id());
+  BreakpointSite &HardBS =
+      Proc->createBreakpointSite(FuncAddr, /*Hardware=*/true);
+  HardBS.enable();
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  REQUIRE(toStringView(pipe.read()) == "Doing something evil...\n");
+  REQUIRE(toStringView(Pipe.read()) == "Doing something evil...\n");
 }
 
 TEST_CASE("Watchpoint detects read", "[Watchpoint]") {
-  Pipe pipe(/*closeOnExec=*/false);
-  auto proc = Process::launch("targets/anti-debugger", /*debug=*/true,
-                              /*outFd=*/pipe.getWrite());
-  pipe.closeWrite();
+  Pipe Pipe(/*CloseOnExec=*/false);
+  auto Proc = Process::launch("targets/anti-debugger", /*Debug=*/true,
+                              /*OutFD=*/Pipe.getWrite());
+  Pipe.closeWrite();
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  auto funcAddr = VirtAddr(fromBytes<U64>(pipe.read().data()));
+  auto FuncAddr = VirtAddr(fromBytes<U64>(Pipe.read().data()));
 
-  Watchpoint &wp =
-      proc->createWatchpoint(funcAddr, StoppointMode::ReadWrite, 1);
-  wp.enable();
+  Watchpoint &WP =
+      Proc->createWatchpoint(FuncAddr, StoppointMode::ReadWrite, 1);
+  WP.enable();
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  proc->stepInstruction();
-  BreakpointSite &bp = proc->createBreakpointSite(funcAddr, /*hardware=*/false);
-  bp.enable();
+  Proc->stepInstruction();
+  BreakpointSite &BP = Proc->createBreakpointSite(FuncAddr, /*Hardware=*/false);
+  BP.enable();
 
-  proc->resume();
-  StopReason reason = proc->waitOnSignal();
+  Proc->resume();
+  StopReason Reason = Proc->waitOnSignal();
 
-  REQUIRE(reason.info == SIGTRAP);
+  REQUIRE(Reason.Info == SIGTRAP);
 
-  proc->resume();
-  proc->waitOnSignal();
+  Proc->resume();
+  Proc->waitOnSignal();
 
-  REQUIRE(toStringView(pipe.read()) == "Doing something evil...\n");
+  REQUIRE(toStringView(Pipe.read()) == "Doing something evil...\n");
 }

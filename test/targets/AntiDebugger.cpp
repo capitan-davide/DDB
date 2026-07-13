@@ -19,23 +19,23 @@ void anInnocentFunction() { std::puts("Doing something innocent..."); }
 // the checksum of the function code. See "section hashing" for more
 // information.
 int checksum() {
-  auto begin = reinterpret_cast<volatile const char *>(&anEvilFunction);
-  auto end = reinterpret_cast<volatile const char *>(&anEvilFunctionEnd);
-  return std::accumulate(begin, end, 0);
+  auto Begin = reinterpret_cast<volatile const char *>(&anEvilFunction);
+  auto End = reinterpret_cast<volatile const char *>(&anEvilFunctionEnd);
+  return std::accumulate(Begin, End, 0);
 }
 
 int main() {
-  const int safe = checksum();
+  const int Safe = checksum();
 
   // For testing purpose, print the function address to stdout so that the
   // debugger can read it.
-  auto ptr = reinterpret_cast<void *>(&anEvilFunction);
-  write(STDOUT_FILENO, &ptr, sizeof(void *));
+  auto Ptr = reinterpret_cast<void *>(&anEvilFunction);
+  write(STDOUT_FILENO, &Ptr, sizeof(void *));
   fflush(stdout);
   raise(SIGTRAP);
 
   while (true) {
-    if (checksum() == safe) {
+    if (checksum() == Safe) {
       anEvilFunction();
     } else {
       anInnocentFunction();

@@ -10,31 +10,31 @@
 #include <Zydis/Zydis.h>
 
 std::vector<DDB::Disassembler::Instruction>
-DDB::Disassembler::disassemble(std::size_t nInstr,
-                               std::optional<VirtAddr> addr) const {
-  std::vector<Instruction> ret;
-  ret.reserve(nInstr);
+DDB::Disassembler::disassemble(std::size_t NumInstr,
+                               std::optional<VirtAddr> Addr) const {
+  std::vector<Instruction> Ret;
+  Ret.reserve(NumInstr);
 
-  if (!addr) {
-    addr.emplace(m_proc->getPC());
+  if (!Addr) {
+    Addr.emplace(Proc->getPC());
   }
 
-  // The largest x86_64 instruction is 15 byte, reading nInstrInstr * 15 bytes
-  // guarantees to have enough memory to disassemble 'nInstr' instructions.
-  std::vector<std::byte> code =
-      m_proc->readMemoryWithoutTraps(*addr, nInstr * 15);
+  // The largest x86_64 instruction is 15 byte, reading NumInstr * 15 bytes
+  // guarantees to have enough memory to disassemble 'NumInstr' instructions.
+  std::vector<std::byte> Code =
+      Proc->readMemoryWithoutTraps(*Addr, NumInstr * 15);
 
-  ZyanUSize offs = 0;
-  ZydisDisassembledInstruction instr;
+  ZyanUSize Offs = 0;
+  ZydisDisassembledInstruction Instr;
   while (ZYAN_SUCCESS(ZydisDisassembleATT(ZYDIS_MACHINE_MODE_LONG_64,
-                                          addr->asInt(), code.data() + offs,
-                                          code.size() - offs, &instr)) &&
-         nInstr > 0) {
-    ret.push_back(Instruction{*addr, std::string(instr.text)});
-    offs += instr.info.length;
-    *addr += instr.info.length;
-    --nInstr;
+                                          Addr->asInt(), Code.data() + Offs,
+                                          Code.size() - Offs, &Instr)) &&
+         NumInstr > 0) {
+    Ret.push_back(Instruction{*Addr, std::string(Instr.text)});
+    Offs += Instr.info.length;
+    *Addr += Instr.info.length;
+    --NumInstr;
   }
 
-  return ret;
+  return Ret;
 }

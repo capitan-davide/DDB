@@ -39,184 +39,182 @@
 using namespace std::string_view_literals;
 
 namespace {
-DDB::Process *g_DDBProcess;
-void handleSigInt(int) {
-  ::kill(g_DDBProcess->pid(), SIGSTOP);
-}
+DDB::Process *Process;
+void handleSigInt(int) { ::kill(Process->pid(), SIGSTOP); }
 
-std::unique_ptr<DDB::Process> attach(int argc, const char *argv[]);
-void mainLoop(std::unique_ptr<DDB::Process> &proc);
-void handleCommand(std::unique_ptr<DDB::Process> &proc, std::string_view line);
-void handleRegisterCommand(DDB::Process &proc,
-                           const std::vector<std::string> &args);
-void handleRegisterRead(DDB::Process &proc,
-                        const std::vector<std::string> &args);
-void handleRegisterWrite(DDB::Process &proc,
-                         const std::vector<std::string> &args);
-void handleBreakpointCommand(DDB::Process &proc,
-                             const std::vector<std::string> &args);
-void handleWatchpointCommand(DDB::Process &proc,
-                             const std::vector<std::string> &args);
-void handleWatchpointList(DDB::Process &proc,
-                          const std::vector<std::string> &args);
-void handleWatchpointSet(DDB::Process &proc,
-                         const std::vector<std::string> &args);
-void handleMemoryCommand(DDB::Process &proc,
-                         const std::vector<std::string> &args);
-void handleMemoryReadCommand(DDB::Process &proc,
-                             const std::vector<std::string> &args);
-void handleMemoryWriteCommand(DDB::Process &proc,
-                              const std::vector<std::string> &args);
-void handleDisassembleCommand(DDB::Process &proc,
-                              const std::vector<std::string> &args);
-void handleStop(DDB::Process &proc, DDB::StopReason reason);
-void handleQuitCommand(DDB::Process &proc,
-                       const std::vector<std::string> &args);
-DDB::Registers::Value parseRegisterValue(DDB::RegisterInfo info,
-                                         std::string_view text);
-void printStopReason(const DDB::Process &proc, DDB::StopReason reason);
-void printDisassembly(const DDB::Process &proc, DDB::VirtAddr addr,
-                      std::size_t nInstr);
-void printHelp(const std::vector<std::string> &args);
-std::vector<std::string> split(std::string_view str, char delim);
-bool isPrefix(std::string_view str, std::string_view of);
-void resume(pid_t pid);
-void waitOnSignal(pid_t pid);
+std::unique_ptr<DDB::Process> attach(int Argc, const char *Argv[]);
+void mainLoop(std::unique_ptr<DDB::Process> &Proc);
+void handleCommand(std::unique_ptr<DDB::Process> &Proc, std::string_view Line);
+void handleRegisterCommand(DDB::Process &Proc,
+                           const std::vector<std::string> &Args);
+void handleRegisterRead(DDB::Process &Proc,
+                        const std::vector<std::string> &Args);
+void handleRegisterWrite(DDB::Process &Proc,
+                         const std::vector<std::string> &Args);
+void handleBreakpointCommand(DDB::Process &Proc,
+                             const std::vector<std::string> &Args);
+void handleWatchpointCommand(DDB::Process &Proc,
+                             const std::vector<std::string> &Args);
+void handleWatchpointList(DDB::Process &Proc,
+                          const std::vector<std::string> &Args);
+void handleWatchpointSet(DDB::Process &Proc,
+                         const std::vector<std::string> &Args);
+void handleMemoryCommand(DDB::Process &Proc,
+                         const std::vector<std::string> &Args);
+void handleMemoryReadCommand(DDB::Process &Proc,
+                             const std::vector<std::string> &Args);
+void handleMemoryWriteCommand(DDB::Process &Proc,
+                              const std::vector<std::string> &Args);
+void handleDisassembleCommand(DDB::Process &Proc,
+                              const std::vector<std::string> &Args);
+void handleStop(DDB::Process &Proc, DDB::StopReason Reason);
+void handleQuitCommand(DDB::Process &Proc,
+                       const std::vector<std::string> &Args);
+DDB::Registers::Value parseRegisterValue(DDB::RegisterInfo Info,
+                                         std::string_view Text);
+void printStopReason(const DDB::Process &Proc, DDB::StopReason Reason);
+void printDisassembly(const DDB::Process &Proc, DDB::VirtAddr Addr,
+                      std::size_t NumInstr);
+void printHelp(const std::vector<std::string> &Args);
+std::vector<std::string> split(std::string_view Str, char Delim);
+bool isPrefix(std::string_view Str, std::string_view Of);
+void resume(pid_t Pid);
+void waitOnSignal(pid_t Pid);
 } // namespace
 
-int main(int argc, const char *argv[]) {
-  if (argc == 1) {
+int main(int Argc, const char *Argv[]) {
+  if (Argc == 1) {
     std::cerr << "No arguments given\n";
     std::exit(EXIT_FAILURE);
   }
 
-  int ret = EXIT_SUCCESS;
+  int Ret = EXIT_SUCCESS;
   try {
-    std::unique_ptr<DDB::Process> proc = attach(argc, argv);
-    g_DDBProcess = proc.get();
+    std::unique_ptr<DDB::Process> Proc = attach(Argc, Argv);
+    Process = Proc.get();
     ::signal(SIGINT, handleSigInt);
-    mainLoop(proc);
-  } catch (const DDB::Error &err) {
-    std::cout << err.what() << '\n';
-    ret = EXIT_FAILURE;
+    mainLoop(Proc);
+  } catch (const DDB::Error &Err) {
+    std::cout << Err.what() << '\n';
+    Ret = EXIT_FAILURE;
   }
 
-  return ret;
+  return Ret;
 }
 
 namespace {
-std::unique_ptr<DDB::Process> attach(int argc, const char *argv[]) {
-  if (argc == 3 && argv[1] == "-p"sv) {
-    pid_t pid = std::atoi(argv[2]);
-    return DDB::Process::attach(pid);
+std::unique_ptr<DDB::Process> attach(int Argc, const char *Argv[]) {
+  if (Argc == 3 && Argv[1] == "-p"sv) {
+    pid_t Pid = std::atoi(Argv[2]);
+    return DDB::Process::attach(Pid);
   } else {
-    const char *progPath = argv[1];
-    auto proc = DDB::Process::launch(progPath);
-    fmt::println("Launched process with PID {}", proc->pid());
-    return proc;
+    const char *ProgPath = Argv[1];
+    auto Proc = DDB::Process::launch(ProgPath);
+    fmt::println("Launched process with PID {}", Proc->pid());
+    return Proc;
   }
 }
 
-void mainLoop(std::unique_ptr<DDB::Process> &proc) {
-  char *line = nullptr;
-  while ((line = readline("DDB> ")) != nullptr) {
-    std::string lineStr;
+void mainLoop(std::unique_ptr<DDB::Process> &Proc) {
+  char *Line = nullptr;
+  while ((Line = readline("DDB> ")) != nullptr) {
+    std::string LineStr;
 
-    if (line == ""sv) {
-      std::free(line);
+    if (Line == ""sv) {
+      std::free(Line);
       if (history_length > 0) {
-        lineStr = history_list()[history_length - 1]->line;
+        LineStr = history_list()[history_length - 1]->line;
       }
     } else {
-      lineStr = line;
-      add_history(line);
-      std::free(line);
+      LineStr = Line;
+      add_history(Line);
+      std::free(Line);
     }
 
-    if (!lineStr.empty()) {
+    if (!LineStr.empty()) {
       try {
-        handleCommand(proc, lineStr);
-      } catch (const DDB::Error &err) {
-        std::cout << err.what() << '\n';
+        handleCommand(Proc, LineStr);
+      } catch (const DDB::Error &Err) {
+        std::cout << Err.what() << '\n';
       }
     }
   }
 }
 
-void handleCommand(std::unique_ptr<DDB::Process> &proc, std::string_view line) {
-  std::vector<std::string> args = split(line, ' ');
+void handleCommand(std::unique_ptr<DDB::Process> &Proc, std::string_view Line) {
+  std::vector<std::string> Args = split(Line, ' ');
 
-  std::string cmd = args[0];
-  if (isPrefix(cmd, "continue")) {
-    proc->resume();
-    DDB::StopReason reason = proc->waitOnSignal();
-    handleStop(*proc, reason);
-  } else if (isPrefix(cmd, "register")) {
-    handleRegisterCommand(*proc, args);
-  } else if (isPrefix(cmd, "breakpoint")) {
-    handleBreakpointCommand(*proc, args);
-  } else if (isPrefix(cmd, "step")) {
-    DDB::StopReason reason = proc->stepInstruction();
-    handleStop(*proc, reason);
-  } else if (isPrefix(cmd, "memory")) {
-    handleMemoryCommand(*proc, args);
-  } else if (isPrefix(cmd, "disassemble")) {
-    handleDisassembleCommand(*proc, args);
-  } else if (isPrefix(cmd, "watchpoint")) {
-    handleWatchpointCommand(*proc, args);
-  } else if (isPrefix(cmd, "help")) {
-    printHelp(args);
-  } else if (isPrefix(cmd, "quit")) {
-    handleQuitCommand(*proc, args);
+  std::string Cmd = Args[0];
+  if (isPrefix(Cmd, "continue")) {
+    Proc->resume();
+    DDB::StopReason Reason = Proc->waitOnSignal();
+    handleStop(*Proc, Reason);
+  } else if (isPrefix(Cmd, "register")) {
+    handleRegisterCommand(*Proc, Args);
+  } else if (isPrefix(Cmd, "breakpoint")) {
+    handleBreakpointCommand(*Proc, Args);
+  } else if (isPrefix(Cmd, "step")) {
+    DDB::StopReason Reason = Proc->stepInstruction();
+    handleStop(*Proc, Reason);
+  } else if (isPrefix(Cmd, "memory")) {
+    handleMemoryCommand(*Proc, Args);
+  } else if (isPrefix(Cmd, "disassemble")) {
+    handleDisassembleCommand(*Proc, Args);
+  } else if (isPrefix(Cmd, "watchpoint")) {
+    handleWatchpointCommand(*Proc, Args);
+  } else if (isPrefix(Cmd, "help")) {
+    printHelp(Args);
+  } else if (isPrefix(Cmd, "quit")) {
+    handleQuitCommand(*Proc, Args);
   } else {
     std::cerr << "Unknown command\n";
   }
 }
 
-void handleRegisterCommand(DDB::Process &proc,
-                           const std::vector<std::string> &args) {
-  if (args.size() < 2) {
+void handleRegisterCommand(DDB::Process &Proc,
+                           const std::vector<std::string> &Args) {
+  if (Args.size() < 2) {
     printHelp({"help", "register"});
     return;
   }
 
-  if (isPrefix(args[1], "read")) {
-    handleRegisterRead(proc, args);
-  } else if (isPrefix(args[1], "write")) {
-    handleRegisterWrite(proc, args);
+  if (isPrefix(Args[1], "read")) {
+    handleRegisterRead(Proc, Args);
+  } else if (isPrefix(Args[1], "write")) {
+    handleRegisterWrite(Proc, Args);
   } else {
     printHelp({"help", "register"});
   }
 }
 
-void handleRegisterRead(DDB::Process &proc,
-                        const std::vector<std::string> &args) {
-  auto format = [](auto t) {
-    if constexpr (std::is_floating_point_v<decltype(t)>) {
-      return fmt::format("{}", t);
-    } else if constexpr (std::is_integral_v<decltype(t)>) {
-      return fmt::format("{:#0{}x}", t, sizeof(t) * 2 + 2);
+void handleRegisterRead(DDB::Process &Proc,
+                        const std::vector<std::string> &Args) {
+  auto Format = [](auto Val) {
+    if constexpr (std::is_floating_point_v<decltype(Val)>) {
+      return fmt::format("{}", Val);
+    } else if constexpr (std::is_integral_v<decltype(Val)>) {
+      return fmt::format("{:#0{}x}", Val, sizeof(Val) * 2 + 2);
     } else {
-      return fmt::format("[{:#04x}]", fmt::join(t, ","));
+      return fmt::format("[{:#04x}]", fmt::join(Val, ","));
     }
   };
 
-  if (args.size() == 2 || (args.size() == 3 && args[2] == "all")) {
-    for (const auto &info : DDB::g_registerInfo) {
-      bool shouldPrint =
-          (args.size() == 3 || info.type == DDB::RegisterType::GPR) &&
-          info.name != "orig_rax";
-      if (!shouldPrint)
+  if (Args.size() == 2 || (Args.size() == 3 && Args[2] == "all")) {
+    for (const auto &Info : DDB::RegisterInfoTable) {
+      bool ShouldPrint =
+          (Args.size() == 3 || Info.Type == DDB::RegisterType::GPR) &&
+          Info.Name != "orig_rax";
+      if (!ShouldPrint)
         continue;
-      DDB::Registers::Value value = proc.getRegisters().read(info);
-      fmt::println("{}:\t{}", info.name, std::visit(format, value));
+      DDB::Registers::Value Value = Proc.getRegisters().read(Info);
+      fmt::println("{}:\t{}", Info.Name, std::visit(Format, Value));
     }
-  } else if (args.size() == 3) {
+  } else if (Args.size() == 3) {
     try {
-      const DDB::RegisterInfo &info = DDB::registerInfoByName(args[2]);
-      DDB::Registers::Value value = proc.getRegisters().read(info);
-      fmt::println("{}:\t{}", info.name, std::visit(format, value));
-    } catch (DDB::Error &err) {
+      const DDB::RegisterInfo &Info = DDB::registerInfoByName(Args[2]);
+      DDB::Registers::Value Value = Proc.getRegisters().read(Info);
+      fmt::println("{}:\t{}", Info.Name, std::visit(Format, Value));
+    } catch (DDB::Error &Err) {
       std::cerr << "No such register\n";
       return;
     }
@@ -225,124 +223,124 @@ void handleRegisterRead(DDB::Process &proc,
   }
 }
 
-void handleRegisterWrite(DDB::Process &proc,
-                         const std::vector<std::string> &args) {
-  if (args.size() != 4) {
+void handleRegisterWrite(DDB::Process &Proc,
+                         const std::vector<std::string> &Args) {
+  if (Args.size() != 4) {
     printHelp({"help", "register"});
     return;
   }
 
   try {
-    const DDB::RegisterInfo &info = DDB::registerInfoByName(args[2]);
-    DDB::Registers::Value value = parseRegisterValue(info, args[3]);
-    proc.getRegisters().write(info, value);
-  } catch (DDB::Error &err) {
-    std::cerr << err.what() << '\n';
+    const DDB::RegisterInfo &Info = DDB::registerInfoByName(Args[2]);
+    DDB::Registers::Value Value = parseRegisterValue(Info, Args[3]);
+    Proc.getRegisters().write(Info, Value);
+  } catch (DDB::Error &Err) {
+    std::cerr << Err.what() << '\n';
     return;
   }
 }
 
-void handleBreakpointCommand(DDB::Process &proc,
-                             const std::vector<std::string> &args) {
-  if (args.size() < 2) {
+void handleBreakpointCommand(DDB::Process &Proc,
+                             const std::vector<std::string> &Args) {
+  if (Args.size() < 2) {
     printHelp({"help", "breakpoint"});
     return;
   }
 
-  std::string cmd = args[1];
+  std::string Cmd = Args[1];
 
-  if (isPrefix(cmd, "list")) {
-    if (proc.breakpointSites().empty()) {
+  if (isPrefix(Cmd, "list")) {
+    if (Proc.breakpointSites().empty()) {
       fmt::println("No breakpoints set");
     } else {
       fmt::println("Current breakpoints:");
-      proc.breakpointSites().forEach([](auto &bs) {
-        if (bs.isInternal())
+      Proc.breakpointSites().forEach([](auto &BS) {
+        if (BS.isInternal())
           return;
-        fmt::println("{}: addr = {:#x}, {}", bs.id(), bs.addr().asInt(),
-                     bs.isEnabled() ? "enabled" : "disabled");
+        fmt::println("{}: addr = {:#x}, {}", BS.id(), BS.addr().asInt(),
+                     BS.isEnabled() ? "enabled" : "disabled");
       });
     }
     return;
   }
 
-  if (args.size() < 3) {
+  if (Args.size() < 3) {
     printHelp({"help", "breakpoint"});
     return;
   }
 
-  if (isPrefix(cmd, "set")) {
-    std::optional addr = DDB::toIntegral<U64>(args[2], 16);
-    if (!addr) {
+  if (isPrefix(Cmd, "set")) {
+    std::optional Addr = DDB::toIntegral<U64>(Args[2], 16);
+    if (!Addr) {
       fmt::println(stderr, "Breakpoint commands expects address in "
                            "hexadecimal, prefixed with '0x'");
       return;
     }
-    bool hardware = false;
-    if (args.size() == 4) {
-      if (args[3] == "-h")
-        hardware = true;
+    bool Hardware = false;
+    if (Args.size() == 4) {
+      if (Args[3] == "-h")
+        Hardware = true;
       else
         DDB::Error::send("Invalid breakpoint command argument");
     }
-    proc.createBreakpointSite(DDB::VirtAddr(*addr), hardware).enable();
+    Proc.createBreakpointSite(DDB::VirtAddr(*Addr), Hardware).enable();
     return;
   }
 
-  std::optional id = DDB::toIntegral<DDB::BreakpointSite::IdType>(args[2]);
-  if (isPrefix(cmd, "enable")) {
-    proc.breakpointSites().getById(*id).enable();
-  } else if (isPrefix(cmd, "disable")) {
-    proc.breakpointSites().getById(*id).disable();
-  } else if (isPrefix(cmd, "delete")) {
-    proc.breakpointSites().removeById(*id);
+  std::optional Id = DDB::toIntegral<DDB::BreakpointSite::IdType>(Args[2]);
+  if (isPrefix(Cmd, "enable")) {
+    Proc.breakpointSites().getById(*Id).enable();
+  } else if (isPrefix(Cmd, "disable")) {
+    Proc.breakpointSites().getById(*Id).disable();
+  } else if (isPrefix(Cmd, "delete")) {
+    Proc.breakpointSites().removeById(*Id);
   }
 }
 
-void handleWatchpointCommand(DDB::Process &proc,
-                             const std::vector<std::string> &args) {
-  if (args.size() < 2) {
+void handleWatchpointCommand(DDB::Process &Proc,
+                             const std::vector<std::string> &Args) {
+  if (Args.size() < 2) {
     printHelp({"help", "watchpoint"});
     return;
   }
 
-  std::string cmd = args[1];
+  std::string Cmd = Args[1];
 
-  if (isPrefix(cmd, "list")) {
-    handleWatchpointList(proc, args);
+  if (isPrefix(Cmd, "list")) {
+    handleWatchpointList(Proc, Args);
     return;
   }
 
-  if (isPrefix(cmd, "set")) {
-    handleWatchpointSet(proc, args);
+  if (isPrefix(Cmd, "set")) {
+    handleWatchpointSet(Proc, Args);
     return;
   }
 
-  if (args.size() < 3) {
+  if (Args.size() < 3) {
     printHelp({"help", "watchpoint"});
     return;
   }
 
-  auto id = DDB::toIntegral<DDB::Watchpoint::IdType>(args[2]);
-  if (!id) {
+  auto Id = DDB::toIntegral<DDB::Watchpoint::IdType>(Args[2]);
+  if (!Id) {
     std::cerr << "Command expects watchpoint id\n"; // FIXME: Consistent error
                                                     // handling
     return;
   }
 
-  if (isPrefix(cmd, "enable")) {
-    proc.watchpoints().getById(*id).enable();
-  } else if (isPrefix(cmd, "disable")) {
-    proc.watchpoints().getById(*id).disable();
-  } else if (isPrefix(cmd, "delete")) {
-    proc.watchpoints().removeById(*id);
+  if (isPrefix(Cmd, "enable")) {
+    Proc.watchpoints().getById(*Id).enable();
+  } else if (isPrefix(Cmd, "disable")) {
+    Proc.watchpoints().getById(*Id).disable();
+  } else if (isPrefix(Cmd, "delete")) {
+    Proc.watchpoints().removeById(*Id);
   }
 }
 
-void handleWatchpointList(DDB::Process &proc,
-                          const std::vector<std::string> &args) {
-  auto watchpointModeToString = [](DDB::StoppointMode mode) {
-    switch (mode) {
+void handleWatchpointList(DDB::Process &Proc,
+                          const std::vector<std::string> &Args) {
+  auto WatchpointModeToString = [](DDB::StoppointMode Mode) {
+    switch (Mode) {
     case DDB::StoppointMode::Execute:
       return "x";
     case DDB::StoppointMode::Write:
@@ -354,182 +352,182 @@ void handleWatchpointList(DDB::Process &proc,
     }
   };
 
-  if (proc.watchpoints().empty()) {
+  if (Proc.watchpoints().empty()) {
     fmt::println("No watchpoints set");
   } else {
-    proc.watchpoints().forEach([&](DDB::Watchpoint &wp) {
-      fmt::println("{}: addr = {:#x}, mode = {}, size = {}, {}", wp.id(),
-                   wp.addr().asInt(), watchpointModeToString(wp.mode()),
-                   wp.size(), wp.isEnabled() ? "enabled" : "disabled");
+    Proc.watchpoints().forEach([&](DDB::Watchpoint &WP) {
+      fmt::println("{}: addr = {:#x}, mode = {}, size = {}, {}", WP.id(),
+                   WP.addr().asInt(), WatchpointModeToString(WP.mode()),
+                   WP.size(), WP.isEnabled() ? "enabled" : "disabled");
     });
   }
 }
 
-void handleWatchpointSet(DDB::Process &proc,
-                         const std::vector<std::string> &args) {
-  if (args.size() != 5) {
+void handleWatchpointSet(DDB::Process &Proc,
+                         const std::vector<std::string> &Args) {
+  if (Args.size() != 5) {
     printHelp({"help", "watchpoint"});
     return;
   }
 
-  std::optional addr = DDB::toIntegral<U64>(args[2], 16);
-  std::string modeStr = args[3];
-  std::optional size = DDB::toIntegral<std::size_t>(args[4]);
+  std::optional Addr = DDB::toIntegral<U64>(Args[2], 16);
+  std::string ModeStr = Args[3];
+  std::optional Size = DDB::toIntegral<std::size_t>(Args[4]);
 
-  if (!addr || !size ||
-      !(modeStr == "w" || modeStr == "rw" || modeStr == "x")) {
+  if (!Addr || !Size ||
+      !(ModeStr == "w" || ModeStr == "rw" || ModeStr == "x")) {
     printHelp({"help", "watchpoint"});
     return;
   }
 
-  DDB::StoppointMode mode;
-  if (modeStr == "w")
-    mode = DDB::StoppointMode::Write;
-  else if (modeStr == "rw")
-    mode = DDB::StoppointMode::ReadWrite;
-  else if (modeStr == "x")
-    mode = DDB::StoppointMode::Execute;
+  DDB::StoppointMode Mode;
+  if (ModeStr == "w")
+    Mode = DDB::StoppointMode::Write;
+  else if (ModeStr == "rw")
+    Mode = DDB::StoppointMode::ReadWrite;
+  else if (ModeStr == "x")
+    Mode = DDB::StoppointMode::Execute;
 
-  proc.createWatchpoint(DDB::VirtAddr(*addr), mode, *size).enable();
+  Proc.createWatchpoint(DDB::VirtAddr(*Addr), Mode, *Size).enable();
 }
 
-void handleMemoryCommand(DDB::Process &proc,
-                         const std::vector<std::string> &args) {
-  if (args.size() < 3) {
+void handleMemoryCommand(DDB::Process &Proc,
+                         const std::vector<std::string> &Args) {
+  if (Args.size() < 3) {
     printHelp({"help", "memory"});
     return;
   }
-  if (isPrefix(args[1], "read")) {
-    handleMemoryReadCommand(proc, args);
-  } else if (isPrefix(args[1], "write")) {
-    handleMemoryWriteCommand(proc, args);
+  if (isPrefix(Args[1], "read")) {
+    handleMemoryReadCommand(Proc, Args);
+  } else if (isPrefix(Args[1], "write")) {
+    handleMemoryWriteCommand(Proc, Args);
   } else {
     printHelp({"help", "memory"});
   }
 }
 
-void handleMemoryReadCommand(DDB::Process &proc,
-                             const std::vector<std::string> &args) {
-  auto toPrintableRange = [](auto begin, auto end) {
-    std::string str(begin, end);
-    std::for_each(str.begin(), str.end(), [](auto &c) {
-      if (!std::isprint(c))
-        c = '.';
+void handleMemoryReadCommand(DDB::Process &Proc,
+                             const std::vector<std::string> &Args) {
+  auto ToPrintableRange = [](auto Begin, auto End) {
+    std::string Str(Begin, End);
+    std::for_each(Str.begin(), Str.end(), [](auto &C) {
+      if (!std::isprint(C))
+        C = '.';
     });
-    return str;
+    return Str;
   };
 
-  auto addr = DDB::toIntegral<U64>(args[2], 16);
-  if (!addr)
+  auto Addr = DDB::toIntegral<U64>(Args[2], 16);
+  if (!Addr)
     DDB::Error::send("Invalid address format");
 
-  int nBytes = 32;
-  if (args.size() == 4) {
-    auto nBytesArg = DDB::toIntegral<std::size_t>(args[3]);
-    if (!nBytesArg)
+  int NumBytes = 32;
+  if (Args.size() == 4) {
+    auto NumBytesArg = DDB::toIntegral<std::size_t>(Args[3]);
+    if (!NumBytesArg)
       DDB::Error::send("Invalid number of bytes");
-    nBytes = *nBytesArg;
+    NumBytes = *NumBytesArg;
   }
 
-  std::vector<std::byte> data = proc.readMemory(DDB::VirtAddr(*addr), nBytes);
-  for (std::size_t i = 0; i < data.size(); i += 16) {
-    auto begin = data.begin() + i;
-    auto end = data.begin() + std::min(i + 16, data.size());
-    fmt::println("{:#016x}: {:02x} {}", *addr + i, fmt::join(begin, end, " "),
-                 toPrintableRange(begin, end));
+  std::vector<std::byte> Data = Proc.readMemory(DDB::VirtAddr(*Addr), NumBytes);
+  for (std::size_t I = 0; I < Data.size(); I += 16) {
+    auto Begin = Data.begin() + I;
+    auto End = Data.begin() + std::min(I + 16, Data.size());
+    fmt::println("{:#016x}: {:02x} {}", *Addr + I, fmt::join(Begin, End, " "),
+                 ToPrintableRange(Begin, End));
   }
 }
 
-void handleMemoryWriteCommand(DDB::Process &proc,
-                              const std::vector<std::string> &args) {
-  if (args.size() != 4) {
+void handleMemoryWriteCommand(DDB::Process &Proc,
+                              const std::vector<std::string> &Args) {
+  if (Args.size() != 4) {
     printHelp({"help", "memory"});
     return;
   }
 
-  auto addr = DDB::toIntegral<U64>(args[2], 16);
-  if (!addr)
+  auto Addr = DDB::toIntegral<U64>(Args[2], 16);
+  if (!Addr)
     DDB::Error::send("Invalid address format");
 
-  std::vector<std::byte> data = DDB::parseVector(args[3]);
-  proc.writeMemory(DDB::VirtAddr(*addr), data);
+  std::vector<std::byte> Data = DDB::parseVector(Args[3]);
+  Proc.writeMemory(DDB::VirtAddr(*Addr), Data);
 }
 
-void handleDisassembleCommand(DDB::Process &proc,
-                              const std::vector<std::string> &args) {
-  DDB::VirtAddr addr = proc.getPC();
-  std::size_t nInstr = 5;
-  for (auto it = args.begin() + 1; it != args.end(); ++it) {
-    if (*it == "-a" && it + 1 != args.end()) {
-      ++it;
-      auto optAddr = DDB::toIntegral<U64>(*it++, 16);
-      if (!optAddr)
+void handleDisassembleCommand(DDB::Process &Proc,
+                              const std::vector<std::string> &Args) {
+  DDB::VirtAddr Addr = Proc.getPC();
+  std::size_t NumInstr = 5;
+  for (auto It = Args.begin() + 1; It != Args.end(); ++It) {
+    if (*It == "-a" && It + 1 != Args.end()) {
+      ++It;
+      auto OptAddr = DDB::toIntegral<U64>(*It++, 16);
+      if (!OptAddr)
         DDB::Error::send("Invalid address format");
-      addr = DDB::VirtAddr(*optAddr);
-    } else if (*it == "-c" && it + 1 != args.end()) {
-      ++it;
-      auto optNInstr = DDB::toIntegral<std::size_t>(*it++);
-      if (!optNInstr)
+      Addr = DDB::VirtAddr(*OptAddr);
+    } else if (*It == "-c" && It + 1 != Args.end()) {
+      ++It;
+      auto OptNumInstr = DDB::toIntegral<std::size_t>(*It++);
+      if (!OptNumInstr)
         DDB::Error::send("Invalid instruction count");
-      nInstr = *optNInstr;
+      NumInstr = *OptNumInstr;
     } else {
       printHelp({"help", "disassemble"});
     }
   }
-  printDisassembly(proc, addr, nInstr);
+  printDisassembly(Proc, Addr, NumInstr);
 }
 
-void handleStop(DDB::Process &proc, DDB::StopReason reason) {
-  printStopReason(proc, reason);
-  if (reason.state == DDB::ProcessState::Stopped) {
-    printDisassembly(proc, proc.getPC(), 5);
+void handleStop(DDB::Process &Proc, DDB::StopReason Reason) {
+  printStopReason(Proc, Reason);
+  if (Reason.State == DDB::ProcessState::Stopped) {
+    printDisassembly(Proc, Proc.getPC(), 5);
   }
 }
 
-void handleQuitCommand(DDB::Process &proc,
-                       const std::vector<std::string> &args) {
-  if (args.size() > 2) {
+void handleQuitCommand(DDB::Process &Proc,
+                       const std::vector<std::string> &Args) {
+  if (Args.size() > 2) {
     printHelp({"help", "quit"});
     return;
   }
 
-  int status = 0;
-  if (args.size() == 2) {
+  int Status = 0;
+  if (Args.size() == 2) {
     try {
-      status = DDB::toIntegral<int>(args[1]).value();
+      Status = DDB::toIntegral<int>(Args[1]).value();
     } catch (...) {
       printHelp({"help", "quit"});
       return;
     }
   }
 
-  proc.terminate();
-  std::exit(status);
+  Proc.terminate();
+  std::exit(Status);
 }
 
-DDB::Registers::Value parseRegisterValue(DDB::RegisterInfo info,
-                                         std::string_view text) {
+DDB::Registers::Value parseRegisterValue(DDB::RegisterInfo Info,
+                                         std::string_view Text) {
   try {
-    if (info.format == DDB::RegisterFormat::UInt) {
-      switch (info.size) {
+    if (Info.Format == DDB::RegisterFormat::UInt) {
+      switch (Info.Size) {
       case 1:
-        return DDB::toIntegral<U8>(text, 16).value();
+        return DDB::toIntegral<U8>(Text, 16).value();
       case 2:
-        return DDB::toIntegral<U16>(text, 16).value();
+        return DDB::toIntegral<U16>(Text, 16).value();
       case 4:
-        return DDB::toIntegral<U32>(text, 16).value();
+        return DDB::toIntegral<U32>(Text, 16).value();
       case 8:
-        return DDB::toIntegral<U64>(text, 16).value();
+        return DDB::toIntegral<U64>(Text, 16).value();
       }
-    } else if (info.format == DDB::RegisterFormat::DoubleFloat) {
-      return DDB::toFloat<double>(text).value();
-    } else if (info.format == DDB::RegisterFormat::LongDouble) {
-      return DDB::toFloat<long double>(text).value();
-    } else if (info.format == DDB::RegisterFormat::Vector) {
-      if (info.size == 8) {
-        return DDB::parseVector<8>(text);
-      } else if (info.size == 16) {
-        return DDB::parseVector<16>(text);
+    } else if (Info.Format == DDB::RegisterFormat::DoubleFloat) {
+      return DDB::toFloat<double>(Text).value();
+    } else if (Info.Format == DDB::RegisterFormat::LongDouble) {
+      return DDB::toFloat<long double>(Text).value();
+    } else if (Info.Format == DDB::RegisterFormat::Vector) {
+      if (Info.Size == 8) {
+        return DDB::parseVector<8>(Text);
+      } else if (Info.Size == 16) {
+        return DDB::parseVector<16>(Text);
       }
     }
   } catch (...) {
@@ -537,37 +535,37 @@ DDB::Registers::Value parseRegisterValue(DDB::RegisterInfo info,
   DDB::Error::send("InvalidFormat");
 }
 
-void printStopReason(const DDB::Process &proc, DDB::StopReason reason) {
-  std::string msg;
-  switch (reason.state) {
+void printStopReason(const DDB::Process &Proc, DDB::StopReason Reason) {
+  std::string Msg;
+  switch (Reason.State) {
   case DDB::ProcessState::Exited:
-    msg = fmt::format("exited with status {}", static_cast<int>(reason.info));
+    Msg = fmt::format("exited with status {}", static_cast<int>(Reason.Info));
     break;
   case DDB::ProcessState::Terminated:
-    msg = fmt::format("terminated with signal {}", sigabbrev_np(reason.info));
+    Msg = fmt::format("terminated with signal {}", sigabbrev_np(Reason.Info));
     break;
   case DDB::ProcessState::Stopped:
-    msg = fmt::format("stopped with signal {} at {:#x}",
-                      sigabbrev_np(reason.info), proc.getPC().asInt());
+    Msg = fmt::format("stopped with signal {} at {:#x}",
+                      sigabbrev_np(Reason.Info), Proc.getPC().asInt());
     break;
   default:
     break;
   }
-  fmt::println("Process {} {}", proc.pid(), msg);
+  fmt::println("Process {} {}", Proc.pid(), Msg);
 }
 
-void printDisassembly(const DDB::Process &proc, DDB::VirtAddr addr,
-                      std::size_t nInstr) {
-  DDB::Disassembler dis(proc);
+void printDisassembly(const DDB::Process &Proc, DDB::VirtAddr Addr,
+                      std::size_t NumInstr) {
+  DDB::Disassembler Dis(Proc);
 
-  std::vector instructions = dis.disassemble(nInstr, addr);
-  for (const auto &instr : instructions) {
-    fmt::println("{:#018x}: {}", instr.addr.asInt(), instr.text);
+  std::vector Instructions = Dis.disassemble(NumInstr, Addr);
+  for (const auto &Instr : Instructions) {
+    fmt::println("{:#018x}: {}", Instr.Addr.asInt(), Instr.Text);
   }
 }
 
-void printHelp(const std::vector<std::string> &args) {
-  if (args.size() == 1) {
+void printHelp(const std::vector<std::string> &Args) {
+  if (Args.size() == 1) {
     std::cerr << R"(Debugger commands:
   breakpoint  - Commands for operating on breakpoints
   continue    - Resume the process
@@ -578,14 +576,14 @@ void printHelp(const std::vector<std::string> &args) {
   step        - Step over a single instruction
   watchpoint  - Commands for operating on watchpoints
 )";
-  } else if (isPrefix(args[1], "register")) {
+  } else if (isPrefix(Args[1], "register")) {
     std::cerr << R"(Debugger commands:
   read
   read <register>
   read all
   write <register> <value>
 )";
-  } else if (isPrefix(args[1], "breakpoint")) {
+  } else if (isPrefix(Args[1], "breakpoint")) {
     std::cerr << R"(Debugger commands:
   list
   delete <id>
@@ -594,13 +592,13 @@ void printHelp(const std::vector<std::string> &args) {
   set <addr>
   set <addr> -h
 )";
-  } else if (isPrefix(args[1], "memory")) {
+  } else if (isPrefix(Args[1], "memory")) {
     std::cerr << R"(Debugger commands:
   read <addr>
   read <addr> <number-of-bytes>
   write <addr> <bytes>
 )";
-  } else if (isPrefix(args[1], "watchpoint")) {
+  } else if (isPrefix(Args[1], "watchpoint")) {
     std::cerr << R"(Debugger commands:
   list
   delete <id>
@@ -608,12 +606,12 @@ void printHelp(const std::vector<std::string> &args) {
   enable <id>
   set <addr> <w|rw|x> <size>
 )";
-  } else if (isPrefix(args[1], "disassemble")) {
+  } else if (isPrefix(Args[1], "disassemble")) {
     std::cerr << R"(Debugger commands:
   disassemble
   disassemble -c <n> -a <addr>
 )";
-  } else if (isPrefix(args[1], "quit")) {
+  } else if (isPrefix(Args[1], "quit")) {
     std::cerr << R"(Debubber commands:
   quit
   quit <exit-status>
@@ -623,35 +621,35 @@ void printHelp(const std::vector<std::string> &args) {
   }
 }
 
-std::vector<std::string> split(std::string_view str, char delim) {
-  std::vector<std::string> out;
-  std::istringstream iss{std::string(str)};
+std::vector<std::string> split(std::string_view Str, char Delim) {
+  std::vector<std::string> Out;
+  std::istringstream Iss{std::string(Str)};
 
-  std::string item;
-  while (std::getline(iss, item, delim)) {
-    out.push_back(item);
+  std::string Item;
+  while (std::getline(Iss, Item, Delim)) {
+    Out.push_back(Item);
   }
 
-  return out;
+  return Out;
 }
 
-bool isPrefix(std::string_view str, std::string_view of) {
-  if (str.size() > of.size()) {
+bool isPrefix(std::string_view Str, std::string_view Of) {
+  if (Str.size() > Of.size()) {
     return false;
   }
-  return std::equal(str.begin(), str.end(), of.begin());
+  return std::equal(Str.begin(), Str.end(), Of.begin());
 }
 
-void resume(pid_t pid) {
-  if (ptrace(PTRACE_CONT, pid, nullptr, nullptr) == -1) {
+void resume(pid_t Pid) {
+  if (ptrace(PTRACE_CONT, Pid, nullptr, nullptr) == -1) {
     std::perror("ptrace(PTRACE_CONT)");
     std::exit(EXIT_FAILURE);
   }
 }
 
-void waitOnSignal(pid_t pid) {
-  int waitStatus;
-  if (waitpid(pid, &waitStatus, 0) == -1) {
+void waitOnSignal(pid_t Pid) {
+  int WaitStatus;
+  if (waitpid(Pid, &WaitStatus, 0) == -1) {
     std::perror("waitpid");
     std::exit(EXIT_FAILURE);
   }

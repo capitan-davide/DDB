@@ -7,24 +7,24 @@
 namespace DDB {
 class Pipe {
 public:
-  explicit Pipe(bool closeOnExec);
+  explicit Pipe(bool CloseOnExec);
   ~Pipe();
 
-  int getRead() const { return m_pipeFd[readFd]; }
-  int getWrite() const { return m_pipeFd[writeFd]; }
+  int getRead() const { return PipeFD[ReadFD]; }
+  int getWrite() const { return PipeFD[WriteFD]; }
   int releaseRead();
   int releaseWrite();
   void closeRead();
   void closeWrite();
 
   std::vector<std::byte> read();
-  void write(std::byte *bytes, std::size_t nBytes);
+  void write(std::byte *Bytes, std::size_t NumBytes);
 
 private:
-  static constexpr unsigned readFd = 0;
-  static constexpr unsigned writeFd = 1;
+  static constexpr unsigned ReadFD = 0;
+  static constexpr unsigned WriteFD = 1;
 
-  int m_pipeFd[2];
+  int PipeFD[2];
 };
 } // namespace DDB
 

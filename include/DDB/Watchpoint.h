@@ -16,34 +16,34 @@ public:
   Watchpoint &operator=(const Watchpoint &) = delete;
   Watchpoint &operator=(Watchpoint &&) = delete;
 
-  IdType id() const { return m_id; }
+  IdType id() const { return Id; }
 
   void enable();
   void disable();
 
-  bool isEnabled() const { return m_isEnabled; }
+  bool isEnabled() const { return IsEnabled; }
 
-  VirtAddr addr() const { return m_addr; }
-  StoppointMode mode() const { return m_mode; }
-  std::size_t size() const { return m_size; }
+  VirtAddr addr() const { return Addr; }
+  StoppointMode mode() const { return Mode; }
+  std::size_t size() const { return Size; }
 
-  bool atAddr(VirtAddr addr) const { return m_addr == addr; }
-  bool inRange(VirtAddr low, VirtAddr high) const {
-    return low <= m_addr && m_addr < high;
+  bool atAddr(VirtAddr Addr) const { return this->Addr == Addr; }
+  bool inRange(VirtAddr Low, VirtAddr High) const {
+    return Low <= Addr && Addr < High;
   }
 
 private:
   friend Process;
-  Watchpoint(Process &proc, VirtAddr addr, StoppointMode mode,
-             std::size_t size);
+  Watchpoint(Process &Proc, VirtAddr Addr, StoppointMode Mode,
+             std::size_t Size);
 
-  IdType m_id;
-  Process *m_proc;
-  VirtAddr m_addr;
-  StoppointMode m_mode;
-  std::size_t m_size;
-  bool m_isEnabled;
-  int m_hardwareRegisterIdx = -1;
+  IdType Id;
+  Process *Proc;
+  VirtAddr Addr;
+  StoppointMode Mode;
+  std::size_t Size;
+  bool IsEnabled;
+  int HardwareRegisterIdx = -1;
 };
 } // namespace DDB
 

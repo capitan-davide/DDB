@@ -18,9 +18,9 @@ enum class RegisterId {
 #undef REG
 };
 
-inline std::string_view toString(RegisterId id) {
+inline std::string_view toString(RegisterId Id) {
 #define REG(name, dwarfId, size, offset, type, format)                         \
-  if (id == RegisterId::name)                                                  \
+  if (Id == RegisterId::name)                                                  \
     return "RegisterId::" #name;
 #include "DDB/Registers.inc"
 #undef REG
@@ -32,41 +32,41 @@ enum class RegisterType { GPR, SubGPR, FPR, DR };
 enum class RegisterFormat { UInt, DoubleFloat, LongDouble, Vector };
 
 struct RegisterInfo {
-  RegisterId id;
-  std::string_view name;
-  I32 dwarfId;
-  std::size_t size;
-  std::size_t offset;
-  RegisterType type;
-  RegisterFormat format;
+  RegisterId Id;
+  std::string_view Name;
+  I32 DwarfId;
+  std::size_t Size;
+  std::size_t Offset;
+  RegisterType Type;
+  RegisterFormat Format;
 };
 
-inline constexpr const RegisterInfo g_registerInfo[] = {
+inline constexpr const RegisterInfo RegisterInfoTable[] = {
 #define REG(name, dwarfId, size, offset, type, format)                         \
   {RegisterId::name, #name, dwarfId, size, offset, type, format},
 #include "DDB/Registers.inc"
 #undef REG
 };
 
-template <class F> const RegisterInfo &registerInfoBy(F f) {
-  auto it =
-      std::find_if(std::begin(g_registerInfo), std::end(g_registerInfo), f);
-  if (it == std::end(g_registerInfo))
+template <class F> const RegisterInfo &registerInfoBy(F Fn) {
+  auto It = std::find_if(std::begin(RegisterInfoTable),
+                         std::end(RegisterInfoTable), Fn);
+  if (It == std::end(RegisterInfoTable))
     Error::send("Can't find register info");
 
-  return *it;
+  return *It;
 }
 
-inline const RegisterInfo &registerInfoById(RegisterId id) {
-  return registerInfoBy([id](auto &i) { return i.id == id; });
+inline const RegisterInfo &registerInfoById(RegisterId Id) {
+  return registerInfoBy([Id](auto &RI) { return RI.Id == Id; });
 }
 
-inline const RegisterInfo &registerInfoByName(std::string_view name) {
-  return registerInfoBy([name](auto &i) { return i.name == name; });
+inline const RegisterInfo &registerInfoByName(std::string_view Name) {
+  return registerInfoBy([Name](auto &RI) { return RI.Name == Name; });
 }
 
-inline const RegisterInfo &registerInfoByDwarfId(I32 dwarfId) {
-  return registerInfoBy([dwarfId](auto &i) { return i.dwarfId == dwarfId; });
+inline const RegisterInfo &registerInfoByDwarfId(I32 DwarfId) {
+  return registerInfoBy([DwarfId](auto &RI) { return RI.DwarfId == DwarfId; });
 }
 
 } // namespace DDB

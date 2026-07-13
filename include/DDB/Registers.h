@@ -25,19 +25,19 @@ public:
   Value read(const RegisterInfo &info) const;
   void write(const RegisterInfo &info, Value val);
 
-  template <class T> T readByIdAs(RegisterId id) const {
-    auto RI = registerInfoById(id);
-    return std::get<T>(read(registerInfoById(id)));
+  template <class T> T readByIdAs(RegisterId Id) const {
+    auto RI = registerInfoById(Id);
+    return std::get<T>(read(registerInfoById(Id)));
   }
 
-  void writeById(RegisterId id, Value val) { write(registerInfoById(id), val); }
+  void writeById(RegisterId Id, Value Val) { write(registerInfoById(Id), Val); }
 
 private:
   friend Process;
-  Registers(Process &proc) : m_proc(&proc) {}
+  Registers(Process &Proc) : Proc(&Proc) {}
 
-  user m_data;
-  Process *m_proc;
+  user Data;
+  Process *Proc;
 };
 } // namespace DDB
 

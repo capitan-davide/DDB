@@ -28,23 +28,23 @@
 #include <unistd.h>
 
 namespace {
-[[noreturn]] void exitWithPError(DDB::Pipe &pipe, std::string_view prefix) {
-  std::string msg = std::string(prefix) + ": " + std::strerror(errno);
-  pipe.write(reinterpret_cast<std::byte *>(msg.data()), msg.size());
+[[noreturn]] void exitWithPError(DDB::Pipe &Pipe, std::string_view Prefix) {
+  std::string Msg = std::string(Prefix) + ": " + std::strerror(errno);
+  Pipe.write(reinterpret_cast<std::byte *>(Msg.data()), Msg.size());
   std::exit(EXIT_FAILURE);
 }
 
-int findFreeStoppointRegister(U64 ctlReg) {
-  for (unsigned i = 0; i < 4; ++i) {
-    if ((ctlReg & (0b11 << (i * 2))) == 0) {
-      return i;
+int findFreeStoppointRegister(U64 CtlReg) {
+  for (unsigned I = 0; I < 4; ++I) {
+    if ((CtlReg & (0b11 << (I * 2))) == 0) {
+      return I;
     }
   }
   DDB::Error::send("No remaining hardware debug registers");
 }
 
-U64 encodeHardwareStoppointMode(DDB::StoppointMode mode) {
-  switch (mode) {
+U64 encodeHardwareStoppointMode(DDB::StoppointMode Mode) {
+  switch (Mode) {
   case DDB::StoppointMode::Write:
     return 0b01;
   case DDB::StoppointMode::ReadWrite:
@@ -56,8 +56,8 @@ U64 encodeHardwareStoppointMode(DDB::StoppointMode mode) {
   }
 }
 
-U64 encodeHardwareStoppointSize(std::size_t size) {
-  switch (size) {
+U64 encodeHardwareStoppointSize(std::size_t Size) {
+  switch (Size) {
   case 1:
     return 0b00;
   case 2:
@@ -72,400 +72,399 @@ U64 encodeHardwareStoppointSize(std::size_t size) {
 }
 } // namespace
 
-DDB::StopReason::StopReason(int waitStatus) {
+DDB::StopReason::StopReason(int WaitStatus) {
   // According to wait(2), a state change is considered to be:
   //   - the child terminated;
   //   - the child was stopped by a signal; or
   //   - the child was resumed by a signal.
-  if (WIFEXITED(waitStatus)) {
-    state = ProcessState::Exited;
-    info = WEXITSTATUS(waitStatus);
-  } else if (WIFSIGNALED(waitStatus)) {
-    state = ProcessState::Terminated;
-    info = WTERMSIG(waitStatus);
-  } else if (WIFSTOPPED(waitStatus)) {
-    state = ProcessState::Stopped;
-    info = WSTOPSIG(waitStatus);
-  } else if (WIFCONTINUED(waitStatus)) {
-    state = ProcessState::Running;
-    info = 0;
+  if (WIFEXITED(WaitStatus)) {
+    State = ProcessState::Exited;
+    Info = WEXITSTATUS(WaitStatus);
+  } else if (WIFSIGNALED(WaitStatus)) {
+    State = ProcessState::Terminated;
+    Info = WTERMSIG(WaitStatus);
+  } else if (WIFSTOPPED(WaitStatus)) {
+    State = ProcessState::Stopped;
+    Info = WSTOPSIG(WaitStatus);
+  } else if (WIFCONTINUED(WaitStatus)) {
+    State = ProcessState::Running;
+    Info = 0;
   } else {
     DDB_UNREACHABLE("Invalid wait status");
   }
 }
 
-std::unique_ptr<DDB::Process> DDB::Process::launch(std::filesystem::path path,
-                                                   bool debug,
-                                                   std::optional<int> outFd) {
-  Pipe pipe(/*closeOnExec=*/true);
+std::unique_ptr<DDB::Process> DDB::Process::launch(std::filesystem::path Path,
+                                                   bool Debug,
+                                                   std::optional<int> OutFD) {
+  Pipe Pipe(/*CloseOnExec=*/true);
 
-  pid_t pid = fork();
-  if (pid == -1) {
+  pid_t Pid = fork();
+  if (Pid == -1) {
     Error::sendErrno("fork");
   }
 
   // If we are the child process, execute the target program.
-  if (pid == 0) {
+  if (Pid == 0) {
     // Disable ASLR for processes that we launch so the address remain stable
     // between program runs.
     if (personality(ADDR_NO_RANDOMIZE) == -1) {
-      exitWithPError(pipe, "personality");
+      exitWithPError(Pipe, "personality");
     }
 
     // We don't need the read end of the pipe, we only write to it in case of
     // errors.
-    pipe.closeRead();
-    if (outFd) {
-      if (dup2(*outFd, STDOUT_FILENO) == -1) {
-        exitWithPError(pipe, "dup2");
+    Pipe.closeRead();
+    if (OutFD) {
+      if (dup2(*OutFD, STDOUT_FILENO) == -1) {
+        exitWithPError(Pipe, "dup2");
       }
     }
 
     // PTRACE_TRACEME allows the parent process to trace this child. Also, it
     // causes the child to stop after calling 'exec*()', giving the parent a
     // chance to take control before the new program begins execution.
-    if (debug && ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) == -1) {
-      exitWithPError(pipe, "ptrace(PTRACE_TRACEME)");
+    if (Debug && ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) == -1) {
+      exitWithPError(Pipe, "ptrace(PTRACE_TRACEME)");
     }
 
     // 'execlp' returns only if there was an error, in which case we write the
     // error message to the pipe and terminate.
-    execlp(path.c_str(), path.c_str(), nullptr);
-    exitWithPError(pipe, "execlp");
+    execlp(Path.c_str(), Path.c_str(), nullptr);
+    exitWithPError(Pipe, "execlp");
   }
 
   // The parent process closes the write end of the pipe then waits for the
   // child to write to it in case of errors. When the child process also closes
-  // the write end, the read operation will return (see closeOnExec=true above).
-  pipe.closeWrite();
-  std::vector<std::byte> data = pipe.read();
-  pipe.closeRead();
+  // the write end, the read operation will return (see CloseOnExec=true above).
+  Pipe.closeWrite();
+  std::vector<std::byte> Data = Pipe.read();
+  Pipe.closeRead();
 
-  if (data.size() > 0) {
-    waitpid(pid, nullptr, 0);
-    auto msg = reinterpret_cast<char *>(data.data());
-    Error::send(std::string(msg, msg + data.size()));
+  if (Data.size() > 0) {
+    waitpid(Pid, nullptr, 0);
+    auto Msg = reinterpret_cast<char *>(Data.data());
+    Error::send(std::string(Msg, Msg + Data.size()));
   }
 
-  std::unique_ptr<Process> proc(
-      new Process(pid, /*termOnEnd=*/true, /*isAttached=*/debug));
-  if (debug) {
+  std::unique_ptr<Process> Proc(
+      new Process(Pid, /*TermOnEnd=*/true, /*IsAttached=*/Debug));
+  if (Debug) {
     // In 'debug' mode the child will be traced so we wait for the SIGTRAP to
     // stop the process.
-    proc->waitOnSignal();
+    Proc->waitOnSignal();
   }
 
-  return proc;
+  return Proc;
 }
 
-std::unique_ptr<DDB::Process> DDB::Process::attach(pid_t pid) {
-  if (pid == 0) {
+std::unique_ptr<DDB::Process> DDB::Process::attach(pid_t Pid) {
+  if (Pid == 0) {
     Error::send("Invalid PID");
   }
 
   // PTRACE_ATTACH will make the target process a tracee. The tracee is sent a
   // SIGSTOP automatically.
-  if (ptrace(PTRACE_ATTACH, pid, nullptr, nullptr) == -1) {
+  if (ptrace(PTRACE_ATTACH, Pid, nullptr, nullptr) == -1) {
     Error::sendErrno("ptrace(PTRACE_ATTACH)");
   }
 
-  std::unique_ptr<Process> proc(
-      new Process(pid, /*termOnEnd=*/false, /*isAttached=*/true));
+  std::unique_ptr<Process> Proc(
+      new Process(Pid, /*TermOnEnd=*/false, /*IsAttached=*/true));
 
   // Here we wait for the SIGSTOP to take effect.
-  proc->waitOnSignal();
+  Proc->waitOnSignal();
 
-  return proc;
+  return Proc;
 }
 
 DDB::Process::~Process() {
-  if (m_pid != 0) {
-    int waitStatus;
-    if (m_isAttached) {
-      if (m_state == ProcessState::Running) {
-        kill(m_pid, SIGSTOP);
-        waitpid(m_pid, &waitStatus, 0);
+  if (Pid != 0) {
+    int WaitStatus;
+    if (IsAttached) {
+      if (State == ProcessState::Running) {
+        kill(Pid, SIGSTOP);
+        waitpid(Pid, &WaitStatus, 0);
       }
-      ptrace(PTRACE_DETACH, m_pid, nullptr, nullptr);
-      kill(m_pid, SIGCONT);
+      ptrace(PTRACE_DETACH, Pid, nullptr, nullptr);
+      kill(Pid, SIGCONT);
     }
 
-    if (m_termOnEnd) {
-      kill(m_pid, SIGKILL);
-      waitpid(m_pid, &waitStatus, 0);
+    if (TermOnEnd) {
+      kill(Pid, SIGKILL);
+      waitpid(Pid, &WaitStatus, 0);
     }
   }
 }
 
 void DDB::Process::resume() {
   // To resume the execution we need to:
-  //   1. disable the breakpoint (i.e., restore the 'm_savedData')
+  //   1. disable the breakpoint (i.e., restore the 'SavedData')
   //   2. step over a single instruction
   //   3. re-enable the breakpoint
   //   4. continue
-  VirtAddr pc = getPC();
-  if (m_breakpointSites.enabledAtAddr(pc)) {
-    BreakpointSite &bs = m_breakpointSites.getByAddr(pc);
-    bs.disable();
+  VirtAddr PC = getPC();
+  if (BreakpointSites.enabledAtAddr(PC)) {
+    BreakpointSite &BS = BreakpointSites.getByAddr(PC);
+    BS.disable();
     if (ptrace(PTRACE_SINGLESTEP, pid(), nullptr, nullptr) == -1) {
       Error::sendErrno("ptrace(PTRACE_SINGLESTEP)");
     }
-    int waitStatus;
-    if (waitpid(pid(), &waitStatus, 0) == -1) {
+    int WaitStatus;
+    if (waitpid(pid(), &WaitStatus, 0) == -1) {
       Error::sendErrno("waitpid");
     }
-    bs.enable();
+    BS.enable();
   }
 
-  if (ptrace(PTRACE_CONT, m_pid, nullptr, nullptr) == -1) {
+  if (ptrace(PTRACE_CONT, Pid, nullptr, nullptr) == -1) {
     Error::sendErrno("ptrace(PTRACE_CONT)");
   }
-  m_state = ProcessState::Running;
+  State = ProcessState::Running;
 }
 
 void DDB::Process::terminate() {
-  if (m_pid == 0)
+  if (Pid == 0)
     return;
 
-  int waitStatus;
-  if (m_isAttached) {
-    if (m_state == ProcessState::Running) {
-      kill(m_pid, SIGSTOP);
-      waitpid(m_pid, &waitStatus, 0);
+  int WaitStatus;
+  if (IsAttached) {
+    if (State == ProcessState::Running) {
+      kill(Pid, SIGSTOP);
+      waitpid(Pid, &WaitStatus, 0);
     }
-    ptrace(PTRACE_DETACH, m_pid, nullptr, nullptr);
-    kill(m_pid, SIGCONT);
+    ptrace(PTRACE_DETACH, Pid, nullptr, nullptr);
+    kill(Pid, SIGCONT);
   }
 
-  kill(m_pid, SIGKILL);
-  waitpid(m_pid, &waitStatus, 0);
+  kill(Pid, SIGKILL);
+  waitpid(Pid, &WaitStatus, 0);
 }
 
 DDB::StopReason DDB::Process::waitOnSignal() {
   // By default, waitpid with 'options=0' waits only for child termination but,
   // when a process is being traced with ptrace, it also returns when the child
   // has stopped.
-  int waitStatus;
-  if (waitpid(m_pid, &waitStatus, 0) == -1) {
+  int WaitStatus;
+  if (waitpid(Pid, &WaitStatus, 0) == -1) {
     Error::sendErrno("waitpid");
   }
 
-  StopReason reason(waitStatus);
-  m_state = reason.state;
+  StopReason Reason(WaitStatus);
+  State = Reason.State;
 
-  if (m_isAttached && m_state == ProcessState::Stopped) {
+  if (IsAttached && State == ProcessState::Stopped) {
     readAllRegisters();
 
     // If we stopped because we hit a breakpoint, we should fix up the program
     // counter to point to the breakpoint. This is required because, to resume
     // the program later on.
-    VirtAddr instrBegin = getPC() - 1;
-    if (reason.info == SIGTRAP && breakpointSites().enabledAtAddr(instrBegin)) {
-      setPC(instrBegin);
+    VirtAddr InstrBegin = getPC() - 1;
+    if (Reason.Info == SIGTRAP && breakpointSites().enabledAtAddr(InstrBegin)) {
+      setPC(InstrBegin);
     }
   }
 
-  return reason;
+  return Reason;
 }
 
-void DDB::Process::writeUserArea(std::size_t offset, U64 data) {
+void DDB::Process::writeUserArea(std::size_t Offset, U64 Data) {
   // FIXME: When executing 'reg write ah 0x42' ptrace returns EIO error. Still,
   // the 'ah' portion of 'rax' register seems to be written correctly.
   // Interestingly, 'reg write al 0x42' does not generate EIO.
   // The same seems to be happening with all "high" portion of x86_64 registers
   // (e.g., 'bh, 'ch', etc.).
-  if (ptrace(PTRACE_POKEUSER, m_pid, offset, data) == -1) {
+  if (ptrace(PTRACE_POKEUSER, Pid, Offset, Data) == -1) {
     Error::sendErrno("ptrace(PTRACE_POKEUSER)");
   }
 }
 
-void DDB::Process::writeFPRs(const user_fpregs_struct &fprs) {
-  if (ptrace(PTRACE_SETFPREGS, m_pid, nullptr, &fprs) == -1) {
+void DDB::Process::writeFPRs(const user_fpregs_struct &FPRs) {
+  if (ptrace(PTRACE_SETFPREGS, Pid, nullptr, &FPRs) == -1) {
     Error::sendErrno("ptrace(PTRACE_SETFPREGS)");
   }
 }
 
-void DDB::Process::writeGPRs(const user_regs_struct &gprs) {
-  if (ptrace(PTRACE_SETREGS, m_pid, nullptr, &gprs) == -1) {
+void DDB::Process::writeGPRs(const user_regs_struct &GPRs) {
+  if (ptrace(PTRACE_SETREGS, Pid, nullptr, &GPRs) == -1) {
     Error::sendErrno("ptrace(PTRACE_SETREGS)");
   }
 }
 
-DDB::BreakpointSite &DDB::Process::createBreakpointSite(VirtAddr addr,
-                                                        bool hardware,
-                                                        bool internal) {
-  if (m_breakpointSites.containsAddr(addr)) {
+DDB::BreakpointSite &DDB::Process::createBreakpointSite(VirtAddr Addr,
+                                                        bool Hardware,
+                                                        bool Internal) {
+  if (BreakpointSites.containsAddr(Addr)) {
     Error::send("Breakpoint site already created at address " +
-                std::to_string(addr.asInt()));
+                std::to_string(Addr.asInt()));
   }
-  return m_breakpointSites.push(std::unique_ptr<BreakpointSite>(
-      new BreakpointSite(*this, addr, hardware, internal)));
+  return BreakpointSites.push(std::unique_ptr<BreakpointSite>(
+      new BreakpointSite(*this, Addr, Hardware, Internal)));
 }
 
-DDB::Watchpoint &DDB::Process::createWatchpoint(VirtAddr addr,
-                                                StoppointMode mode,
-                                                std::size_t size) {
-  if (m_watchpoints.containsAddr(addr)) {
+DDB::Watchpoint &DDB::Process::createWatchpoint(VirtAddr Addr,
+                                                StoppointMode Mode,
+                                                std::size_t Size) {
+  if (Watchpoints.containsAddr(Addr)) {
     Error::send("Watchpoint already created at address " +
-                std::to_string(addr.asInt()));
+                std::to_string(Addr.asInt()));
   }
-  return m_watchpoints.push(
-      std::unique_ptr<Watchpoint>(new Watchpoint(*this, addr, mode, size)));
+  return Watchpoints.push(
+      std::unique_ptr<Watchpoint>(new Watchpoint(*this, Addr, Mode, Size)));
 }
 
-int DDB::Process::setHardwareBreakpoint(BreakpointSite::IdType id,
-                                        VirtAddr addr) {
-  return setHardwareStoppoint(addr, StoppointMode::Execute, 1);
+int DDB::Process::setHardwareBreakpoint(BreakpointSite::IdType Id,
+                                        VirtAddr Addr) {
+  return setHardwareStoppoint(Addr, StoppointMode::Execute, 1);
 }
 
-int DDB::Process::setWatchpoint(Watchpoint::IdType id, VirtAddr addr,
-                                StoppointMode mode, std::size_t size) {
-  return setHardwareStoppoint(addr, mode, size);
+int DDB::Process::setWatchpoint(Watchpoint::IdType Id, VirtAddr Addr,
+                                StoppointMode Mode, std::size_t Size) {
+  return setHardwareStoppoint(Addr, Mode, Size);
 }
 
-void DDB::Process::clearHardwareStoppoint(int idx) {
-  Registers &regs = getRegisters();
+void DDB::Process::clearHardwareStoppoint(int Idx) {
+  Registers &Regs = getRegisters();
 
-  auto id = static_cast<int>(RegisterId::dr0) + idx;
-  regs.writeById(static_cast<RegisterId>(id), 0);
+  auto Id = static_cast<int>(RegisterId::dr0) + Idx;
+  Regs.writeById(static_cast<RegisterId>(Id), 0);
 
-  auto ctlReg = regs.readByIdAs<U64>(RegisterId::dr7);
+  auto CtlReg = Regs.readByIdAs<U64>(RegisterId::dr7);
 
-  U64 clearMaks = (0b11 << (idx * 2)) | (0b1111 << (idx * 4 + 16));
-  U64 masked = ctlReg & ~clearMaks;
+  U64 ClearMask = (0b11 << (Idx * 2)) | (0b1111 << (Idx * 4 + 16));
+  U64 Masked = CtlReg & ~ClearMask;
 
-  regs.writeById(RegisterId::dr7, masked);
+  Regs.writeById(RegisterId::dr7, Masked);
 }
 
 DDB::StopReason DDB::Process::stepInstruction() {
-  std::optional<BreakpointSite *> toReenable;
-  VirtAddr pc = getPC();
-  if (m_breakpointSites.enabledAtAddr(pc)) {
-    BreakpointSite &bs = m_breakpointSites.getByAddr(pc);
-    bs.disable();
-    toReenable = &bs;
+  std::optional<BreakpointSite *> ToReenable;
+  VirtAddr PC = getPC();
+  if (BreakpointSites.enabledAtAddr(PC)) {
+    BreakpointSite &BS = BreakpointSites.getByAddr(PC);
+    BS.disable();
+    ToReenable = &BS;
   }
 
-  if (ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, nullptr)) {
+  if (ptrace(PTRACE_SINGLESTEP, Pid, nullptr, nullptr)) {
     Error::sendErrno("ptrace(PTRACE_SINGLESTEP)");
   }
-  StopReason reason = waitOnSignal();
+  StopReason Reason = waitOnSignal();
 
-  if (toReenable) {
-    toReenable.value()->enable();
+  if (ToReenable) {
+    (*ToReenable)->enable();
   }
-  return reason;
+  return Reason;
 }
 
-std::vector<std::byte> DDB::Process::readMemory(VirtAddr addr,
-                                                std::size_t nBytes) const {
-  std::vector<std::byte> ret(nBytes);
+std::vector<std::byte> DDB::Process::readMemory(VirtAddr Addr,
+                                                std::size_t NumBytes) const {
+  std::vector<std::byte> Ret(NumBytes);
 
-  const struct iovec localDesc = {.iov_base = ret.data(),
-                                  .iov_len = ret.size()};
+  const struct iovec LocalDesc = {.iov_base = Ret.data(),
+                                  .iov_len = Ret.size()};
 
-  std::vector<struct iovec> remoteDescs;
-  while (nBytes > 0) {
-    U64 upToNextPage = 0x1000 - (addr.asInt() & 0xfff); // FIXME: Page size?
-    U64 chunkSize = std::min(nBytes, upToNextPage);
-    remoteDescs.push_back({.iov_base = reinterpret_cast<void *>(addr.asInt()),
-                           .iov_len = chunkSize});
-    nBytes -= chunkSize;
-    addr += chunkSize;
+  std::vector<struct iovec> RemoteDescs;
+  while (NumBytes > 0) {
+    U64 UpToNextPage = 0x1000 - (Addr.asInt() & 0xfff); // FIXME: Page size?
+    U64 ChunkSize = std::min(NumBytes, UpToNextPage);
+    RemoteDescs.push_back({.iov_base = reinterpret_cast<void *>(Addr.asInt()),
+                           .iov_len = ChunkSize});
+    NumBytes -= ChunkSize;
+    Addr += ChunkSize;
   }
 
-  if (process_vm_readv(m_pid, &localDesc, /*liovcnt=*/1, remoteDescs.data(),
-                       remoteDescs.size(), /*flags=*/0) == -1) {
+  if (process_vm_readv(Pid, &LocalDesc, /*liovcnt=*/1, RemoteDescs.data(),
+                       RemoteDescs.size(), /*flags=*/0) == -1) {
     Error::sendErrno("process_vm_readv");
   }
-  return ret;
+  return Ret;
 }
 
 std::vector<std::byte>
-DDB::Process::readMemoryWithoutTraps(VirtAddr addr, std::size_t nBytes) const {
-  std::vector<std::byte> memory = readMemory(addr, nBytes);
-  std::vector<BreakpointSite *> breakpointSites =
-      m_breakpointSites.getInRegion(addr, addr + nBytes);
-  for (BreakpointSite *bs : breakpointSites) {
-    if (!bs->isEnabled() || bs->isHardware())
+DDB::Process::readMemoryWithoutTraps(VirtAddr Addr,
+                                     std::size_t NumBytes) const {
+  std::vector<std::byte> Memory = readMemory(Addr, NumBytes);
+  std::vector<BreakpointSite *> BPSites =
+      BreakpointSites.getInRegion(Addr, Addr + NumBytes);
+  for (BreakpointSite *BP : BPSites) {
+    if (!BP->isEnabled() || BP->isHardware())
       continue;
-    VirtAddr offs = bs->addr() - addr.asInt();
-    memory[offs.asInt()] = bs->m_savedData;
+    VirtAddr Offs = BP->addr() - Addr.asInt();
+    Memory[Offs.asInt()] = BP->SavedData;
   }
-  return memory;
+  return Memory;
 }
 
-void DDB::Process::writeMemory(VirtAddr addr,
-                               Span<const std::byte> data) const {
+void DDB::Process::writeMemory(VirtAddr Addr,
+                               Span<const std::byte> Data) const {
   // We cannot use 'process_vm_writev' here because this function doesn't
   // support writing to protected aread of memory like code segments.
-  std::size_t nWritten = 0;
-  while (nWritten < data.size()) {
-    std::size_t rem = data.size() - nWritten;
-    U64 word;
-    if (rem >= 8) {
-      word = fromBytes<U64>(data.begin() + nWritten);
+  std::size_t NumWritten = 0;
+  while (NumWritten < Data.size()) {
+    std::size_t Rem = Data.size() - NumWritten;
+    U64 Word;
+    if (Rem >= 8) {
+      Word = fromBytes<U64>(Data.begin() + NumWritten);
     } else {
       // If we have less than 8 bytes left, we need to handle a partial memory
       // write. This is because ptrace can only write exactly 8 bytes at a time.
-      std::vector<std::byte> read = readMemory(addr + nWritten, 8);
-      auto wordData = reinterpret_cast<char *>(&word);
-      std::memcpy(wordData, data.begin() + nWritten, rem);
-      std::memcpy(wordData + rem, read.data() + rem, 8 - rem);
+      std::vector<std::byte> Read = readMemory(Addr + NumWritten, 8);
+      auto WordData = reinterpret_cast<char *>(&Word);
+      std::memcpy(WordData, Data.begin() + NumWritten, Rem);
+      std::memcpy(WordData + Rem, Read.data() + Rem, 8 - Rem);
     }
-    if (ptrace(PTRACE_POKEDATA, m_pid, addr + nWritten, word) == -1) {
+    if (ptrace(PTRACE_POKEDATA, Pid, Addr + NumWritten, Word) == -1) {
       Error::sendErrno("Failed to write memory");
     }
-    nWritten += 8;
+    NumWritten += 8;
   }
 }
 
 void DDB::Process::readAllRegisters() {
-  if (ptrace(PTRACE_GETREGS, m_pid, nullptr, &getRegisters().m_data.regs) ==
-      -1) {
+  if (ptrace(PTRACE_GETREGS, Pid, nullptr, &getRegisters().Data.regs) == -1) {
     Error::sendErrno("ptrace(PTRACE_GETREGS)");
   }
-  if (ptrace(PTRACE_GETFPREGS, m_pid, nullptr, &getRegisters().m_data.i387) ==
-      -1) {
+  if (ptrace(PTRACE_GETFPREGS, Pid, nullptr, &getRegisters().Data.i387) == -1) {
     Error::sendErrno("ptrace(PTRACE_GETREGS)");
   }
-  for (unsigned i = 0; i < 8; ++i) {
-    auto id = static_cast<int>(RegisterId::dr0) + i;
-    RegisterInfo info = registerInfoById(static_cast<RegisterId>(id));
+  for (unsigned I = 0; I < 8; ++I) {
+    auto Id = static_cast<int>(RegisterId::dr0) + I;
+    RegisterInfo Info = registerInfoById(static_cast<RegisterId>(Id));
 
     errno = 0;
-    U64 data = ptrace(PTRACE_PEEKUSER, m_pid, info.offset, nullptr);
-    if (data == -1 && errno != 0)
+    U64 Data = ptrace(PTRACE_PEEKUSER, Pid, Info.Offset, nullptr);
+    if (Data == -1 && errno != 0)
       Error::sendErrno("ptrace(PTRACE_PEEKUSER");
 
-    getRegisters().m_data.u_debugreg[i] = data;
+    getRegisters().Data.u_debugreg[I] = Data;
   }
 }
 
-int DDB::Process::setHardwareStoppoint(VirtAddr addr, StoppointMode mode,
-                                       std::size_t size) {
-  Registers &regs = getRegisters();
+int DDB::Process::setHardwareStoppoint(VirtAddr Addr, StoppointMode Mode,
+                                       std::size_t Size) {
+  Registers &Regs = getRegisters();
 
-  auto ctlReg = regs.readByIdAs<U64>(RegisterId::dr7);
-  int freeIdx = findFreeStoppointRegister(ctlReg);
+  auto CtlReg = Regs.readByIdAs<U64>(RegisterId::dr7);
+  int FreeIdx = findFreeStoppointRegister(CtlReg);
 
   // The debug registers' IDs are sequential; the ID of DR1 is the one directly
   // following DR0, and so on.
-  auto id = static_cast<int>(RegisterId::dr0) + freeIdx;
-  regs.writeById(static_cast<RegisterId>(id), addr.asInt());
+  auto Id = static_cast<int>(RegisterId::dr0) + FreeIdx;
+  Regs.writeById(static_cast<RegisterId>(Id), Addr.asInt());
 
-  U64 modeFlag = encodeHardwareStoppointMode(mode);
-  U64 sizeFlag = encodeHardwareStoppointSize(size);
+  U64 ModeFlag = encodeHardwareStoppointMode(Mode);
+  U64 SizeFlag = encodeHardwareStoppointSize(Size);
 
-  U64 enableBit = (1 << (freeIdx * 2));
-  U64 modeBits = (modeFlag << (freeIdx * 4 + 16));
-  U64 sizeBits = (sizeFlag << (freeIdx * 4 + 18));
+  U64 EnableBit = (1 << (FreeIdx * 2));
+  U64 ModeBits = (ModeFlag << (FreeIdx * 4 + 16));
+  U64 SizeBits = (SizeFlag << (FreeIdx * 4 + 18));
 
-  U64 clearMask = (0b11 << (freeIdx * 2)) | (0b1111 << (freeIdx * 4 + 16));
-  U64 masked = ctlReg & ~clearMask;
+  U64 ClearMask = (0b11 << (FreeIdx * 2)) | (0b1111 << (FreeIdx * 4 + 16));
+  U64 Masked = CtlReg & ~ClearMask;
 
-  masked |= enableBit | modeBits | sizeBits;
-  regs.writeById(RegisterId::dr7, masked);
+  Masked |= EnableBit | ModeBits | SizeBits;
+  Regs.writeById(RegisterId::dr7, Masked);
 
-  return freeIdx;
+  return FreeIdx;
 }

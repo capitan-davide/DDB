@@ -26,58 +26,50 @@ using Byte128 = std::array<std::byte, 16>;
 class VirtAddr {
 public:
   VirtAddr() = default;
-  explicit VirtAddr(U64 addr) : m_addr(addr) {}
+  explicit VirtAddr(U64 Addr) : Addr(Addr) {}
 
-  U64 asInt() const { return m_addr; }
+  U64 asInt() const { return Addr; }
 
-  VirtAddr operator+(U64 offs) const { return VirtAddr(m_addr + offs); }
-  VirtAddr operator-(U64 offs) const { return VirtAddr(m_addr - offs); }
+  VirtAddr operator+(U64 Offs) const { return VirtAddr(Addr + Offs); }
+  VirtAddr operator-(U64 Offs) const { return VirtAddr(Addr - Offs); }
 
-  VirtAddr operator+=(U64 offs) {
-    m_addr += offs;
+  VirtAddr operator+=(U64 Offs) {
+    Addr += Offs;
     return *this;
   }
-  VirtAddr operator-=(U64 offs) {
-    m_addr -= offs;
+  VirtAddr operator-=(U64 Offs) {
+    Addr -= Offs;
     return *this;
   }
 
-  bool operator==(const VirtAddr &other) const {
-    return m_addr == other.m_addr;
-  }
-  bool operator!=(const VirtAddr &other) const {
-    return m_addr != other.m_addr;
-  }
-  bool operator<(const VirtAddr &other) const { return m_addr < other.m_addr; }
-  bool operator<=(const VirtAddr &other) const {
-    return m_addr <= other.m_addr;
-  }
-  bool operator>(const VirtAddr &other) const { return m_addr > other.m_addr; }
-  bool operator>=(const VirtAddr &other) const {
-    return m_addr >= other.m_addr;
-  }
+  bool operator==(const VirtAddr &Other) const { return Addr == Other.Addr; }
+  bool operator!=(const VirtAddr &Other) const { return Addr != Other.Addr; }
+  bool operator<(const VirtAddr &Other) const { return Addr < Other.Addr; }
+  bool operator<=(const VirtAddr &Other) const { return Addr <= Other.Addr; }
+  bool operator>(const VirtAddr &Other) const { return Addr > Other.Addr; }
+  bool operator>=(const VirtAddr &Other) const { return Addr >= Other.Addr; }
 
 private:
-  U64 m_addr = 0;
+  U64 Addr = 0;
 };
 
 template <class T> class Span {
 public:
   Span() = default;
-  Span(T *data, std::size_t size) : m_data(data), m_size(size) {}
-  Span(T *begin, T *end) : m_data(begin), m_size(end - begin) {}
+  Span(T *Data, std::size_t Size) : Data(Data), Size(Size) {}
+  Span(T *Begin, T *End) : Data(Begin), Size(End - Begin) {}
 
   template <class U>
-  Span(const std::vector<U> &v) : m_data(v.data()), m_size(v.size()) {}
+  Span(const std::vector<U> &V) : Data(V.data()), Size(V.size()) {}
 
-  T *begin() const { return m_data; }
-  T *end() const { return m_data + m_size; }
-  std::size_t size() const { return m_size; }
-  T &operator[](std::size_t n) { return *(m_data + n); }
+  T *begin() const { return Data; }
+  T *end() const { return Data + Size; }
+  std::size_t size() const { return Size; }
+  T &operator[](std::size_t N) { return *(Data + N); }
 
 private:
-  T *m_data = nullptr;
-  std::size_t m_size = 0;
+  T *Data = nullptr;
+  std::size_t Size = 0;
 };
 
 enum class StoppointMode { Write, ReadWrite, Execute };

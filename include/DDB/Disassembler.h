@@ -11,23 +11,23 @@
 namespace DDB {
 class Disassembler {
   struct Instruction {
-    VirtAddr addr;
-    std::string text;
+    VirtAddr Addr;
+    std::string Text;
   };
 
 public:
-  Disassembler(const Process &proc) : m_proc(&proc) {}
+  Disassembler(const Process &Proc) : Proc(&Proc) {}
 
   /// Disassemble a number of instructions.
-  /// @param nInstr The number of instructions to disassemble.
-  /// @param addr If set, start disassembly from this address rather than the
+  /// @param NumInstr The number of instructions to disassemble.
+  /// @param Addr If set, start disassembly from this address rather than the
   ///             current program counter.
   /// @return The disassembled instructions.
-  std::vector<Instruction> disassemble(std::size_t nInstr,
-                                       std::optional<VirtAddr> addr = {}) const;
+  std::vector<Instruction> disassemble(std::size_t NumInstr,
+                                       std::optional<VirtAddr> Addr = {}) const;
 
 private:
-  const Process *m_proc;
+  const Process *Proc;
 };
 } // namespace DDB
 

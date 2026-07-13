@@ -21,31 +21,31 @@ public:
   void enable();
   void disable();
 
-  bool isEnabled() const { return m_isEnabled; }
-  bool isHardware() const { return m_isHardware; }
-  bool isInternal() const { return m_isInternal; }
+  bool isEnabled() const { return IsEnabled; }
+  bool isHardware() const { return IsHardware; }
+  bool isInternal() const { return IsInternal; }
 
-  IdType id() const { return m_id; }
-  VirtAddr addr() const { return m_addr; }
+  IdType id() const { return Id; }
+  VirtAddr addr() const { return Addr; }
 
-  bool atAddr(VirtAddr addr) const { return m_addr == addr; }
-  bool inRange(VirtAddr low, VirtAddr high) const {
-    return low <= m_addr && m_addr < high;
+  bool atAddr(VirtAddr Addr) const { return this->Addr == Addr; }
+  bool inRange(VirtAddr Low, VirtAddr High) const {
+    return Low <= Addr && Addr < High;
   }
 
 private:
-  BreakpointSite(Process &proc, VirtAddr addr, bool isHardware = false,
-                 bool isInternal = false);
+  BreakpointSite(Process &Proc, VirtAddr Addr, bool IsHardware = false,
+                 bool IsInternal = false);
   friend Process;
 
-  IdType m_id;
-  Process *m_proc;
-  VirtAddr m_addr;
-  bool m_isEnabled;
-  std::byte m_savedData;
-  bool m_isHardware;
-  bool m_isInternal;
-  int m_hardwareRegisterIdx = -1;
+  IdType Id;
+  Process *Proc;
+  VirtAddr Addr;
+  bool IsEnabled;
+  std::byte SavedData;
+  bool IsHardware;
+  bool IsInternal;
+  int HardwareRegisterIdx = -1;
 };
 } // namespace DDB
 
