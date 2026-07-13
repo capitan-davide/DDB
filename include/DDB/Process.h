@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <variant>
 #include <vector>
 
 #include <sys/types.h>
@@ -21,11 +22,14 @@ namespace DDB {
 
 enum class ProcessState { Stopped, Running, Exited, Terminated };
 
+enum class TrapType { SingleStep, SoftwareBreak, HardwareBreak, Unknown };
+
 struct StopReason {
   StopReason(int WaitStatus);
 
   ProcessState State;
   U8 Info;
+  std::optional<TrapType> TrapReason;
 };
 
 class Process {
@@ -82,6 +86,11 @@ public:
   /// @throws Error if the operation fails.
   void writeGPRs(const user_regs_struct &GPRs);
 
+  /// Augment the stop reason with extra information about what kind of trap
+  /// just happened.
+  /// @param SR The stop reason to augment.
+  void augmentStopReason(StopReason &SR);
+
   /// TODO: Write documentation.
   BreakpointSite &createBreakpointSite(VirtAddr Addr, bool Hardware = false,
                                        bool Internal = false);
@@ -91,6 +100,9 @@ public:
   int setHardwareBreakpoint(BreakpointSite::IdType Id, VirtAddr Addr);
   int setWatchpoint(Watchpoint::IdType Id, VirtAddr Addr, StoppointMode Mode,
                     std::size_t Size);
+
+  std::variant<BreakpointSite::IdType, Watchpoint::IdType>
+  getCurrentHardwareStoppoint() const;
 
   void clearHardwareStoppoint(int Idx);
 

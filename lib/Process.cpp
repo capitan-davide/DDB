@@ -17,6 +17,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include <signal.h>
@@ -106,6 +107,15 @@ std::unique_ptr<DDB::Process> DDB::Process::launch(std::filesystem::path Path,
 
   // If we are the child process, execute the target program.
   if (Pid == 0) {
+    // Change the child process group ID. This way we ensure that, when the
+    // user sends a signal to the debugger, this will not be sent to the
+    // child process as well. For example, when the user presses Ctrl-C,
+    // a SIGINT is delivered to *all* processes the the debugger's process
+    // group.
+    if (::setpgid(0, 0) == -1) {
+      exitWithPError(Pipe, "setpgid");
+    }
+
     // Disable ASLR for processes that we launch so the address remain stable
     // between program runs.
     if (personality(ADDR_NO_RANDOMIZE) == -1) {
@@ -250,22 +260,23 @@ DDB::StopReason DDB::Process::waitOnSignal() {
     Error::sendErrno("waitpid");
   }
 
-  StopReason Reason(WaitStatus);
-  State = Reason.State;
+  StopReason SR(WaitStatus);
+  State = SR.State;
 
   if (IsAttached && State == ProcessState::Stopped) {
     readAllRegisters();
+    augmentStopReason(SR);
 
     // If we stopped because we hit a breakpoint, we should fix up the program
     // counter to point to the breakpoint. This is required because, to resume
     // the program later on.
     VirtAddr InstrBegin = getPC() - 1;
-    if (Reason.Info == SIGTRAP && breakpointSites().enabledAtAddr(InstrBegin)) {
+    if (SR.Info == SIGTRAP && breakpointSites().enabledAtAddr(InstrBegin)) {
       setPC(InstrBegin);
     }
   }
 
-  return Reason;
+  return SR;
 }
 
 void DDB::Process::writeUserArea(std::size_t Offset, U64 Data) {
@@ -288,6 +299,32 @@ void DDB::Process::writeFPRs(const user_fpregs_struct &FPRs) {
 void DDB::Process::writeGPRs(const user_regs_struct &GPRs) {
   if (ptrace(PTRACE_SETREGS, Pid, nullptr, &GPRs) == -1) {
     Error::sendErrno("ptrace(PTRACE_SETREGS)");
+  }
+}
+
+void DDB::Process::augmentStopReason(StopReason &SR) {
+  siginfo_t Info;
+  if (::ptrace(PTRACE_GETSIGINFO, Pid, nullptr, &Info) == -1) {
+    Error::sendErrno("ptrace(PTRACE_GETSIGINFO");
+  }
+
+  // Apparently, on x86 the Linux kernel reports the wrong value: SI_KERNEL for
+  // a software breakpoint and TRAP_BRKPT for a single-step over a syscall. Too
+  // many important tools rely on this bug's behavior that it's not worth to
+  // fix it anymore.
+  SR.TrapReason = TrapType::Unknown;
+  if (SR.Info == SIGTRAP) {
+    switch (Info.si_code) {
+    case TRAP_TRACE:
+      SR.TrapReason = TrapType::SingleStep;
+      break;
+    case SI_KERNEL:
+      SR.TrapReason = TrapType::SoftwareBreak;
+      break;
+    case TRAP_HWBKPT:
+      SR.TrapReason = TrapType::HardwareBreak;
+      break;
+    }
   }
 }
 
@@ -321,6 +358,12 @@ int DDB::Process::setHardwareBreakpoint(BreakpointSite::IdType Id,
 int DDB::Process::setWatchpoint(Watchpoint::IdType Id, VirtAddr Addr,
                                 StoppointMode Mode, std::size_t Size) {
   return setHardwareStoppoint(Addr, Mode, Size);
+}
+
+std::variant<DDB::BreakpointSite::IdType, DDB::Watchpoint::IdType>
+DDB::Process::getCurrentHardwareStoppoint() const {
+  // TODO: Not implemented.
+  return {};
 }
 
 void DDB::Process::clearHardwareStoppoint(int Idx) {
